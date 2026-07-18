@@ -33,41 +33,60 @@ function App() {
     window.opabrow.setAlwaysOnTop(onTop);
   }, [onTop]);
 
-  // 顶部 traffic bar 显隐 —— 主动轮询鼠标位置
-  // 原因:webview (hosted plugin) 拦截所有 mouse 事件,renderer 端用
-  // document/window/traffic-bar 上的 mouseenter/mousemove/mouseover 都收不到。
-  // 唯一可靠的方案:用 IPC 问主进程要光标位置 (screen.getCursorScreenPoint)。
+  // 顶部 traffic bar 显隐 —— 主动轮询鼠标位置,直接改 DOM style.opacity
+  // 原因 1:webview (hosted plugin) 拦截所有 mouse 事件,renderer 端用
+  //   document/window/traffic-bar 上的 mouseenter/mousemove/mouseover 都收不到。
+  //   唯一可靠的方案:用 IPC 问主进程要光标位置 (screen.getCursorScreenPoint)。
+  // 原因 2:React 19 + Vite HMR 在某些时序下 setState 不可靠
+  //   (看到 render: trafficBarVisible=true 之后 setTrafficBarVisible(false) 没触发 re-render)
+  //   直接改 DOM style.opacity 最稳。
   useEffect(() => {
     let hideTimer: number | null = null;
     let stopped = false;
+    let currentVisible = false;
 
     if (typeof window.opabrow?.getCursorPos !== 'function') {
-      // 主进程 preload 没加载好,放弃 traffic bar 显隐控制
       return;
     }
 
-    const show = (): void => {
-      if (hideTimer) {
-        clearTimeout(hideTimer);
-        hideTimer = null;
+    const setBarVisible = (visible: boolean): void => {
+      if (visible === currentVisible) return;
+      currentVisible = visible;
+      // 直接改 DOM,绕过 React 渲染 (React 19 + Vite HMR 在某些时序下
+      // setState 后不触发 re-render,直接改 DOM.style.opacity 最稳)
+      const bar = document.querySelector('.traffic-bar') as HTMLElement | null;
+      if (bar) {
+        bar.style.opacity = visible ? '1' : '0';
       }
-      setTrafficBarVisible(true);
+      // 同步 React state(虽然 DOM 已改,但下次 React re-render 会按 state 重置,
+      // 所以两个都改)
+      setTrafficBarVisible(visible);
     };
+
+    // 关键:只在 timer 未设置时设置,避免每次 poll 都重置 timer
+    // (否则 80ms 间隔 poll 会无限重置 300ms timer,永远不 fire)
     const scheduleHide = (): void => {
-      if (hideTimer) clearTimeout(hideTimer);
+      if (hideTimer !== null) return;
       hideTimer = window.setTimeout(() => {
-        setTrafficBarVisible(false);
+        setBarVisible(false);
         hideTimer = null;
       }, 300);
     };
 
-    // 轮询:每 80ms 问主进程要光标位置 (足够流畅,对 IPC 开销可忽略)
+    const show = (): void => {
+      if (hideTimer !== null) {
+        clearTimeout(hideTimer);
+        hideTimer = null;
+      }
+      setBarVisible(true);
+    };
+
+    // 轮询:每 80ms 问主进程要光标位置
     const interval = window.setInterval(async () => {
       if (stopped) return;
       try {
         const pos = await window.opabrow.getCursorPos();
         if (!pos) return;
-        // 鼠标在窗口内
         const inX = pos.x >= 0 && pos.x < pos.bounds.width;
         const inY = pos.y >= 0 && pos.y < pos.bounds.height;
         if (inX && inY) {
@@ -77,12 +96,11 @@ function App() {
             scheduleHide();
           }
         } else {
-          // 鼠标离开窗口
-          if (hideTimer) {
+          if (hideTimer !== null) {
             clearTimeout(hideTimer);
             hideTimer = null;
           }
-          setTrafficBarVisible(false);
+          setBarVisible(false);
         }
       } catch (e) {
         // 忽略
@@ -92,7 +110,7 @@ function App() {
     return () => {
       stopped = true;
       clearInterval(interval);
-      if (hideTimer) {
+      if (hideTimer !== null) {
         clearTimeout(hideTimer);
         hideTimer = null;
       }
@@ -352,6 +370,17 @@ function App() {
       {/* 顶部 iPhone Mirroring 风格 traffic bar —— 作为 fixed 定位的浮层
           平时完全 chrome-less(只 macOS 的 traffic light 已被主进程隐藏到 -100,-100),
           鼠标 hover 窗口顶部 28px 时,React state 驱动 opacity 0→1,显示红黄绿三按钮
+          鼠标离开时,300ms 延迟后自动隐藏
+
+          关键设计:
+          - z-index: 99999,确保在 webview 之上
+          - 80px left padding,让红黄绿按钮避开可能的 macOS 区域
+          - background: #f5f5f7 (macOS 标准 chrome 灰)
+          - WebkitAppRegion: 'drag' 让整个 bar 可拖动窗口 */}
+      {/* 顶部 iPhone Mirroring 风格 traffic bar —— 作为 fixed 定位的浮层
+          平时完全 chrome-less(只 macOS 的 traffic light 已被主进程隐藏到 -100,-100),
+          鼠标 hover 窗口顶部 28px 时,显隐逻辑(在 useEffect 里)会直接改
+          .traffic-bar 元素的 style.opacity,显示红黄绿三按钮
           鼠标离开时,300ms 延迟后自动隐藏
 
           关键设计:
