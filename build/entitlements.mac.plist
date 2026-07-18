@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- App Sandbox - Mac App Store 必需 -->
+  <key>com.apple.security.app-sandbox</key>
+  <true/>
+
+  <!-- 网络客户端: webview 加载任意 URL -->
+  <key>com.apple.security.network.client</key>
+  <true/>
+
+  <!-- 网络服务器(可选,有些网站会建本地 websocket) -->
+  <key>com.apple.security.network.server</key>
+  <true/>
+
+  <!-- 用户选择的文件读写(File > Open/保存书签) -->
+  <key>com.apple.security.files.user-selected.read-write</key>
+  <true/>
+
+  <!-- 允许打印 -->
+  <key>com.apple.security.print</key>
+  <true/>
+</dict>
+</plist>
