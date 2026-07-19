@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="80" y1="72" x2="1360" y2="846" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EEF7F1"/>
+      <stop offset=".48" stop-color="#E9EEF8"/>
+      <stop offset="1" stop-color="#F8F0E7"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="160" y1="100" x2="1260" y2="748" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity=".86"/>
+      <stop offset="1" stop-color="#F4F6FB" stop-opacity=".68"/>
+    </linearGradient>
+    <linearGradient id="page" x1="229" y1="207" x2="1218" y2="672" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#132A42"/>
+      <stop offset=".58" stop-color="#1E5874"/>
+      <stop offset="1" stop-color="#5B9071"/>
+    </linearGradient>
+    <filter id="shadow" x="76" y="54" width="1288" height="766" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="24" stdDeviation="34" flood-color="#203647" flood-opacity=".2"/>
+    </filter>
+    <filter id="blur"><feGaussianBlur stdDeviation="38"/></filter>
+  </defs>
+
+  <rect width="1440" height="900" rx="36" fill="url(#bg)"/>
+  <circle cx="155" cy="142" r="130" fill="#BCE7D1" fill-opacity=".55" filter="url(#blur)"/>
+  <circle cx="1308" cy="742" r="170" fill="#F5D5AC" fill-opacity=".45" filter="url(#blur)"/>
+  <path d="M0 735C208 630 291 823 492 731C693 639 802 666 983 752C1149 831 1282 697 1440 669V900H0V735Z" fill="#FFFFFF" fill-opacity=".4"/>
+
+  <g filter="url(#shadow)">
+    <rect x="150" y="82" width="1140" height="700" rx="26" fill="url(#glass)" stroke="#FFFFFF" stroke-opacity=".8" stroke-width="2"/>
+    <rect x="151" y="83" width="1138" height="58" rx="25" fill="#F8FAFC" fill-opacity=".82"/>
+    <path d="M151 141H1289" stroke="#D3D9E2" stroke-opacity=".85"/>
+
+    <circle cx="188" cy="112" r="8" fill="#FF5F57"/>
+    <circle cx="216" cy="112" r="8" fill="#FEBC2E"/>
+    <rect x="293" y="96" width="538" height="32" rx="8" fill="#FFFFFF" fill-opacity=".87" stroke="#D5DCE5"/>
+    <circle cx="316" cy="112" r="7" stroke="#6F7F91" stroke-width="2"/>
+    <path d="M321 117L326 122" stroke="#6F7F91" stroke-width="2" stroke-linecap="round"/>
+    <text x="342" y="117" fill="#536273" font-family="Arial, sans-serif" font-size="14">faxianai.com</text>
+    <rect x="1150" y="101" width="92" height="22" rx="11" fill="#E4ECF6"/>
+    <text x="1167" y="116" fill="#63778F" font-family="Arial, sans-serif" font-size="12">ON TOP</text>
+
+    <rect x="190" y="169" width="1060" height="562" rx="16" fill="#F8FAFC"/>
+    <rect x="190" y="169" width="1060" height="275" rx="16" fill="url(#page)"/>
+    <circle cx="1090" cy="230" r="170" fill="#8DD6B2" fill-opacity=".35"/>
+    <circle cx="334" cy="393" r="144" fill="#A4D7EF" fill-opacity=".27"/>
+    <path d="M190 356C310 279 407 408 529 332C669 246 729 385 859 313C1011 230 1102 344 1250 278V444H190V356Z" fill="#214B5B" fill-opacity=".8"/>
+    <path d="M190 399C342 344 452 468 600 398C724 340 818 430 949 376C1077 323 1143 404 1250 368V444H190V399Z" fill="#74A55F"/>
+    <text x="246" y="245" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="21" font-weight="700">Discover, keep, and return.</text>
+    <text x="246" y="278" fill="#DCEAF2" font-family="Arial, sans-serif" font-size="15">A quiet browser that stays close without taking over.</text>
+    <rect x="246" y="310" width="126" height="36" rx="18" fill="#FFFFFF" fill-opacity=".2" stroke="#FFFFFF" stroke-opacity=".35"/>
+    <text x="272" y="333" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="13" font-weight="700">OPEN PAGE</text>
+
+    <rect x="220" y="472" width="300" height="230" rx="12" fill="#FFFFFF"/>
+    <rect x="544" y="472" width="300" height="230" rx="12" fill="#FFFFFF"/>
+    <rect x="868" y="472" width="352" height="230" rx="12" fill="#FFFFFF"/>
+    <rect x="244" y="498" width="80" height="10" rx="5" fill="#C6D1DF"/>
+    <rect x="244" y="524" width="235" height="18" rx="5" fill="#E8EEF5"/>
+    <rect x="244" y="554" width="205" height="18" rx="5" fill="#E8EEF5"/>
+    <rect x="244" y="595" width="96" height="28" rx="14" fill="#E4F4E8"/>
+    <text x="260" y="614" fill="#397652" font-family="Arial, sans-serif" font-size="12" font-weight="700">LOCAL FIRST</text>
+    <rect x="568" y="498" width="120" height="10" rx="5" fill="#C6D1DF"/>
+    <rect x="568" y="528" width="104" height="104" rx="14" fill="#E8F1FB"/>
+    <path d="M596 579L618 557L640 579L666 545" stroke="#4F8EDB" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="700" y="534" width="108" height="12" rx="6" fill="#E8EEF5"/>
+    <rect x="700" y="562" width="86" height="12" rx="6" fill="#E8EEF5"/>
+    <rect x="700" y="608" width="80" height="10" rx="5" fill="#BFD5F0"/>
+    <rect x="892" y="498" width="140" height="10" rx="5" fill="#C6D1DF"/>
+    <rect x="892" y="530" width="300" height="44" rx="8" fill="#F5F7FA"/>
+    <circle cx="918" cy="552" r="12" fill="#F4C46A"/>
+    <rect x="942" y="543" width="144" height="10" rx="5" fill="#D9E1EA"/>
+    <rect x="892" y="586" width="300" height="44" rx="8" fill="#F5F7FA"/>
+    <circle cx="918" cy="608" r="12" fill="#80C9A1"/>
+    <rect x="942" y="599" width="196" height="10" rx="5" fill="#D9E1EA"/>
+    <rect x="892" y="642" width="164" height="10" rx="5" fill="#D9E1EA"/>
+  </g>
+
+  <g>
+    <rect x="100" y="725" width="330" height="70" rx="18" fill="#223449" fill-opacity=".88"/>
+    <circle cx="132" cy="760" r="15" fill="#7FBD9A"/>
+    <path d="M125 760H139M132 753V767" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+    <text x="160" y="756" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="14" font-weight="700">Hover to reveal controls</text>
+    <text x="160" y="777" fill="#BFD0DE" font-family="Arial, sans-serif" font-size="12">The page keeps its own space.</text>
+  </g>
+</svg>
