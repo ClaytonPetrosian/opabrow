@@ -300,6 +300,18 @@ function App() {
         case 'reset_home':
           setHomeUrl(DEFAULT_HOME_URL);
           break;
+        case 'bookmark_toggle': {
+          const webview = webviewRef.current;
+          const pageUrl = webview?.getURL() || currentUrl;
+          const pageTitle = webview?.getTitle() || pageUrl;
+          void window.opabrow.toggleBookmark({ url: pageUrl, title: pageTitle }).catch((error) => {
+            console.warn('bookmark toggle failed:', error);
+          });
+          break;
+        }
+        case 'bookmark_open':
+          if (typeof value === 'string') goUrl(value);
+          break;
         case 'go_back':
           try {
             webviewRef.current?.goBack();

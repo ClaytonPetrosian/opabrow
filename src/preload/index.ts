@@ -7,6 +7,8 @@ export type MenuAction =
   | 'home'
   | 'set_home'
   | 'reset_home'
+  | 'bookmark_toggle'
+  | 'bookmark_open'
   | 'go_back'
   | 'go_forward'
   | 'ontop_toggle'
@@ -28,10 +30,11 @@ const api = {
   // 地址栏使用主进程剪贴板，避免透明无边框窗口下 macOS 原生粘贴失效。
   readClipboardText: () => clipboard.readText(),
   writeClipboardText: (text: string) => clipboard.writeText(text),
+  toggleBookmark: (page: { url: string; title: string }) => ipcRenderer.invoke('toggle-bookmark', page),
 
   // 菜单事件订阅
-  onMenuAction: (callback: (action: MenuAction, value?: boolean) => void) => {
-    const handler = (_e: Electron.IpcRendererEvent, action: MenuAction, value?: boolean) => callback(action, value);
+  onMenuAction: (callback: (action: MenuAction, value?: boolean | string) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, action: MenuAction, value?: boolean | string) => callback(action, value);
     ipcRenderer.on('menu-action', handler);
     // 返回 unsubscribe(包成 void 兼容 React useEffect Destructor)
     return (): void => {

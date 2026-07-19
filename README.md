@@ -35,7 +35,7 @@ The title bar stays transparent until the pointer reaches the top edge. It has i
 | --- | --- |
 | Frameless, transparent window with hover-revealed controls | Address bar, local history suggestions, back, forward, reload and home |
 | Adjustable opacity and optional always-on-top behavior | Mobile user-agent mode for checking responsive sites |
-| Local-first browsing history with no account or cloud sync | Native macOS menu commands and familiar keyboard shortcuts |
+| Local-first history and bookmarks with no account or cloud sync | Native macOS menu commands and familiar keyboard shortcuts |
 
 ## Download
 
@@ -83,6 +83,10 @@ The default home page is the opabrow project repository. In the **Browse** menu,
 
 Opening a Bilibili video or Bangumi playback page automatically switches the player to its web fullscreen mode. The video fills the available page area while staying inside the opabrow window.
 
+### Bookmarks and browser import
+
+The macOS **Bookmarks** menu keeps bookmarks out of the browsing surface. Press `Cmd+D` to add or remove the current page, then open nested folders directly from the menu. Import bookmarks from local Chrome or Safari profiles, or choose a standard exported HTML bookmark file. Bookmark data stays on this Mac in opabrow's application data folder.
+
 ### Window controls that do not steal space
 
 The close and minimize controls appear smoothly on hover. The webview always starts below the title bar, so showing the controls does not overlap the page or change its layout.
@@ -102,6 +106,7 @@ Switch to a mobile user agent from the macOS menu to inspect a site's responsive
 | `Cmd+T` | Toggle always-on-top |
 | `Cmd+=` / `Cmd+-` | Adjust window opacity |
 | `Cmd+K` | Open the command panel |
+| `Cmd+D` | Add or remove the current page from bookmarks |
 
 ## Development
 
