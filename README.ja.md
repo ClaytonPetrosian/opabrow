@@ -35,6 +35,14 @@
 | 透明度の調整と任意の常に手前表示 | レスポンシブサイトを確認するためのモバイル User-Agent モード |
 | アカウントやクラウド同期を必要としないローカル優先の履歴 | macOS ネイティブメニューと一般的なキーボードショートカット |
 
+## ダウンロード
+
+[最新リリース](https://github.com/ClaytonPetrosian/opabrow/releases/latest) から macOS、Windows、Linux 向けのインストーラーをダウンロードできます。各リリースには以下を含みます。
+
+- macOS Apple Silicon (`arm64`) および Intel (`x64`)
+- Windows x64（`.exe` インストーラー）
+- Linux x64（`.AppImage`）
+
 ## はじめに
 
 ### 必要環境

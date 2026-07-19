@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS Apple Silicon
+            os: macos-14
+            command: package:mac:arm64
+            artifact: macos-arm64
+          - label: macOS Intel
+            os: macos-13
+            command: package:mac:x64
+            artifact: macos-x64
+          - label: Windows x64
+            os: windows-latest
+            command: package:win:x64
+            artifact: windows-x64
+          - label: Linux x64
+            os: ubuntu-latest
+            command: package:linux:x64
+            artifact: linux-x64
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify types
+        run: pnpm typecheck
+      - name: Package application
+        run: pnpm ${{ matrix.command }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-artifacts/* --clobber
+          else
+            gh release create "$TAG" release-artifacts/* --title "opabrow $TAG" --generate-notes
+          fi
