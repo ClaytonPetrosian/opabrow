@@ -9,6 +9,7 @@ export type MenuAction =
   | 'reset_home'
   | 'bookmark_toggle'
   | 'bookmark_open'
+  | 'password_fill'
   | 'go_back'
   | 'go_forward'
   | 'ontop_toggle'
@@ -17,6 +18,16 @@ export type MenuAction =
   | 'opacity_inc'
   | 'opacity_dec'
   | 'show_quickbar';
+
+export type PasswordMatch = {
+  id: string;
+  origin: string;
+  username: string;
+};
+
+export type PasswordToFill = PasswordMatch & {
+  password: string;
+};
 
 const api = {
   // 窗口控制
@@ -31,6 +42,9 @@ const api = {
   readClipboardText: () => clipboard.readText(),
   writeClipboardText: (text: string) => clipboard.writeText(text),
   toggleBookmark: (page: { url: string; title: string }) => ipcRenderer.invoke('toggle-bookmark', page),
+  listPasswordMatches: (url: string): Promise<PasswordMatch[]> => ipcRenderer.invoke('list-password-matches', url),
+  getPasswordForFill: (request: { id: string; url: string }): Promise<PasswordToFill | null> =>
+    ipcRenderer.invoke('get-password-for-fill', request),
 
   // 菜单事件订阅
   onMenuAction: (callback: (action: MenuAction, value?: boolean | string) => void) => {

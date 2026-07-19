@@ -4,7 +4,7 @@
 
 <h1 align="center">opabrow</h1>
 
-<p align="center">A transparent floating browser for macOS.</p>
+<p align="center"><strong>The transparent floating browser for macOS.</strong></p>
 
 <p align="center">
   <strong>English</strong> · <a href="./README.zh-CN.md">简体中文</a> · <a href="./README.ja.md">日本語</a>
@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  Keep the web close, without letting it take over your desktop.
+  Your tasteful workday browser for quick detours, side quests, and pages worth keeping nearby.
 </p>
 
 <p align="center">
@@ -27,7 +27,7 @@
 
 ## Why opabrow
 
-Most browser windows ask for a whole workspace. opabrow is for the page you want nearby: a reference, a live dashboard, a playlist, or a small task that should remain accessible while you work elsewhere.
+Most browser windows ask for a whole workspace. opabrow is the lightweight "fish-at-work" browser for the page you want nearby: a reference, a live dashboard, a playlist, a Bilibili video, or a small task that should remain accessible while you work elsewhere. It stays quietly on the edge of your desktop instead of taking it over.
 
 The title bar stays transparent until the pointer reaches the top edge. It has its own 32px strip, so revealing the controls never covers or shifts the webpage below.
 
@@ -35,7 +35,7 @@ The title bar stays transparent until the pointer reaches the top edge. It has i
 | --- | --- |
 | Frameless, transparent window with hover-revealed controls | Address bar, local history suggestions, back, forward, reload and home |
 | Adjustable opacity and optional always-on-top behavior | Mobile user-agent mode for checking responsive sites |
-| Local-first history and bookmarks with no account or cloud sync | Native macOS menu commands and familiar keyboard shortcuts |
+| Local-first history, bookmarks and passwords with no account or cloud sync | Native macOS menu commands and familiar keyboard shortcuts |
 
 ## Download
 
@@ -87,6 +87,12 @@ Opening a Bilibili video or Bangumi playback page automatically switches the pla
 
 The macOS **Bookmarks** menu keeps bookmarks out of the browsing surface. Press `Cmd+D` to add or remove the current page, then open nested folders directly from the menu. Import bookmarks from local Chrome or Safari profiles, or choose a standard exported HTML bookmark file. Bookmark data stays on this Mac in opabrow's application data folder.
 
+### Password migration and fill
+
+Move saved logins from Chrome deliberately: export a password CSV from Chrome Password Manager, then choose **Passwords > Import Chrome password CSV…** in opabrow. The CSV is read only after you choose it and confirm the warning. Passwords are encrypted with the macOS Keychain before they are written to opabrow's local application data; opabrow never reads Chrome's internal password database, sends passwords to a server, or syncs them to a cloud service.
+
+At a matching HTTPS origin, choose **Passwords > Fill current page** or press `Cmd+Shift+P`. opabrow never fills credentials automatically on page load. When several accounts match, it asks you to select an account first. The original exported CSV remains under your control, so remove it once you no longer need it.
+
 ### Window controls that do not steal space
 
 The close and minimize controls appear smoothly on hover. The webview always starts below the title bar, so showing the controls does not overlap the page or change its layout.
@@ -107,6 +113,7 @@ Switch to a mobile user agent from the macOS menu to inspect a site's responsive
 | `Cmd+=` / `Cmd+-` | Adjust window opacity |
 | `Cmd+K` | Open the command panel |
 | `Cmd+D` | Add or remove the current page from bookmarks |
+| `Cmd+Shift+P` | Fill the current page from a saved password |
 
 ## Development
 

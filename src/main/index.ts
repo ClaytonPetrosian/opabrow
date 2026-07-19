@@ -8,10 +8,12 @@ import {
   importHtmlBookmarksFromFile,
   importSafariBookmarksFromDisk
 } from './bookmarks';
+import { PasswordStore } from './passwords';
 
 // ---------- 窗口引用 ----------
 let mainWindow: BrowserWindow | null = null;
 let bookmarkStore: BookmarkStore | null = null;
+let passwordStore: PasswordStore | null = null;
 let mobileModeEnabled = false;
 let ipcHandlersRegistered = false;
 const TITLEBAR_HEIGHT = 32;
@@ -153,8 +155,8 @@ function bookmarkMenuItems(nodes: BookmarkNode[], win: BrowserWindow): MenuItemC
 }
 
 function refreshApplicationMenu(): void {
-  if (!mainWindow || mainWindow.isDestroyed() || !bookmarkStore) return;
-  Menu.setApplicationMenu(buildAppMenu(mainWindow, bookmarkStore));
+  if (!mainWindow || mainWindow.isDestroyed() || !bookmarkStore || !passwordStore) return;
+  Menu.setApplicationMenu(buildAppMenu(mainWindow, bookmarkStore, passwordStore));
 }
 
 async function showImportResult(win: BrowserWindow, source: string, importBookmarks: () => Promise<number>): Promise<void> {
@@ -175,7 +177,7 @@ async function showImportResult(win: BrowserWindow, source: string, importBookma
   }
 }
 
-function buildAppMenu(win: BrowserWindow, bookmarks: BookmarkStore): Menu {
+function buildAppMenu(win: BrowserWindow, bookmarks: BookmarkStore, passwords: PasswordStore): Menu {
   const isMac = process.platform === 'darwin';
 
   const appMenu: MenuItemConstructorOptions = {
@@ -310,6 +312,82 @@ function buildAppMenu(win: BrowserWindow, bookmarks: BookmarkStore): Menu {
     ]
   };
 
+  const passwordsMenu: MenuItemConstructorOptions = {
+    label: '密码',
+    submenu: [
+      {
+        label: '填充当前页面',
+        accelerator: 'CmdOrCtrl+Shift+P',
+        enabled: passwords.hasPasswords(),
+        click: () => win.webContents.send('menu-action', 'password_fill')
+      },
+      { type: 'separator' },
+      {
+        label: '从 Chrome 密码 CSV 导入…',
+        click: () => {
+          void (async () => {
+            const selection = await dialog.showOpenDialog(win, {
+              title: '导入 Chrome 密码 CSV',
+              buttonLabel: '选择文件',
+              properties: ['openFile'],
+              filters: [
+                { name: 'Chrome 密码 CSV', extensions: ['csv'] },
+                { name: '所有文件', extensions: ['*'] }
+              ]
+            });
+            if (selection.canceled || selection.filePaths.length === 0) return;
+
+            const confirmation = await dialog.showMessageBox(win, {
+              type: 'warning',
+              title: '导入 Chrome 密码',
+              message: 'Chrome 导出的 CSV 含有明文密码。opabrow 只会读取这一次，并使用 macOS 钥匙串加密保存。',
+              buttons: ['取消', '导入'],
+              defaultId: 0,
+              cancelId: 0
+            });
+            if (confirmation.response !== 1) return;
+
+            const result = await passwords.importChromeCsv(selection.filePaths[0]);
+            refreshApplicationMenu();
+            const changes = [`新增 ${result.added} 条`, `更新 ${result.updated} 条`];
+            if (result.rejected > 0) changes.push(`跳过 ${result.rejected} 条无效记录`);
+            await dialog.showMessageBox(win, {
+              type: 'info',
+              title: '密码导入完成',
+              message: changes.join('，') + '。'
+            });
+          })().catch((error) => {
+            void dialog.showMessageBox(win, {
+              type: 'warning',
+              title: '无法导入密码',
+              message: error instanceof Error ? error.message : '导入过程中发生未知错误。'
+            });
+          });
+        }
+      },
+      { type: 'separator' },
+      {
+        label: '清空本机已保存的密码…',
+        enabled: passwords.hasPasswords(),
+        click: () => {
+          void (async () => {
+            const result = await dialog.showMessageBox(win, {
+              type: 'warning',
+              title: '清空本机密码',
+              message: '确定要删除 opabrow 本机保存的全部密码吗？此操作无法撤销。',
+              buttons: ['取消', '清空'],
+              defaultId: 0,
+              cancelId: 0
+            });
+            if (result.response !== 1) return;
+            await passwords.clear();
+            refreshApplicationMenu();
+          })().catch((error) => console.warn('Could not clear passwords:', error));
+        }
+      }
+    ]
+  };
+
   const editMenu: MenuItemConstructorOptions = {
     label: '编辑',
     submenu: [
@@ -379,14 +457,14 @@ function buildAppMenu(win: BrowserWindow, bookmarks: BookmarkStore): Menu {
   };
 
   const template: MenuItemConstructorOptions[] = isMac
-    ? [appMenu, editMenu, browseMenu, bookmarksMenu, viewMenu, windowMenu]
-    : [editMenu, browseMenu, bookmarksMenu, viewMenu, windowMenu];
+    ? [appMenu, editMenu, browseMenu, bookmarksMenu, passwordsMenu, viewMenu, windowMenu]
+    : [editMenu, browseMenu, bookmarksMenu, passwordsMenu, viewMenu, windowMenu];
 
   return Menu.buildFromTemplate(template);
 }
 
 // ---------- IPC handlers ----------
-function registerIpc(bookmarks: BookmarkStore): void {
+function registerIpc(bookmarks: BookmarkStore, passwords: PasswordStore): void {
   if (ipcHandlersRegistered) return;
   ipcHandlersRegistered = true;
 
@@ -439,6 +517,25 @@ function registerIpc(bookmarks: BookmarkStore): void {
     refreshApplicationMenu();
     return bookmarked;
   });
+
+  ipcMain.handle('list-password-matches', (event, url: unknown) => {
+    if (event.sender.id !== mainWindow?.webContents.id || typeof url !== 'string') return [];
+    return passwords.getMatches(url);
+  });
+
+  ipcMain.handle('get-password-for-fill', async (event, request: unknown) => {
+    if (
+      event.sender.id !== mainWindow?.webContents.id ||
+      !request ||
+      typeof request !== 'object'
+    ) {
+      return null;
+    }
+
+    const { id, url } = request as { id?: unknown; url?: unknown };
+    if (typeof id !== 'string' || typeof url !== 'string') return null;
+    return passwords.getForFill(id, url);
+  });
 }
 
 // ---------- App 生命周期 ----------
@@ -450,10 +547,12 @@ app.whenReady().then(async () => {
   });
 
   bookmarkStore = new BookmarkStore(join(app.getPath('userData'), 'bookmarks.json'));
+  passwordStore = new PasswordStore(join(app.getPath('userData'), 'passwords.json'));
   await bookmarkStore.load();
+  await passwordStore.load();
 
   mainWindow = createMainWindow();
-  registerIpc(bookmarkStore);
+  registerIpc(bookmarkStore, passwordStore);
 
   refreshApplicationMenu();
 
