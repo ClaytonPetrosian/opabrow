@@ -35,6 +35,14 @@
 | 可调透明度与可选置顶 | 移动端 User-Agent 模式，用于检查响应式网页 |
 | 本地优先的浏览历史，无账号或云端同步 | 原生 macOS 菜单命令与熟悉的快捷键 |
 
+## 下载
+
+前往 [最新发布版本](https://github.com/ClaytonPetrosian/opabrow/releases/latest) 下载 macOS、Windows 或 Linux 安装包。每个版本会提供：
+
+- macOS Apple Silicon (`arm64`) 和 Intel (`x64`)
+- Windows x64（`.exe` 安装器）
+- Linux x64（`.AppImage`）
+
 ## 快速开始
 
 ### 环境要求

@@ -1,6 +1,6 @@
-appId: com.tan.opabrow
+appId: com.opabrow.app
 productName: opabrow
-copyright: Copyright © 2026 tan
+copyright: Copyright © 2026 opabrow contributors
 directories:
   buildResources: build
   output: dist
@@ -15,22 +15,22 @@ asarUnpack:
   - resources/**
 win:
   target: nsis
-  artifactName: ${productName}-Setup-${version}.${ext}
+  icon: build/icon.png
+  artifactName: ${productName}-Setup-${version}-${arch}.${ext}
 mac:
   category: public.app-category.utilities
   icon: build/icon.icns
   target:
-    # MAS (Mac App Store) 格式 - 必须用 mas target 才能上架 App Store
-    - target: mas
+    - target: dmg
       arch:
         - arm64
         - x64
   artifactName: ${productName}-${version}-${arch}.${ext}
-  # App Store 上架必备
+  # Signing and notarization are automatically enabled when CI secrets are configured.
   hardenedRuntime: true
   gatekeeperAssess: false
   extendInfo:
-    NSHumanReadableCopyright: Copyright © 2026 tan. All rights reserved.
+    NSHumanReadableCopyright: Copyright © 2026 opabrow contributors.
     LSApplicationCategoryType: public.app-category.utilities
     CFBundleURLTypes:
       - CFBundleURLName: opabrow.url
@@ -38,15 +38,12 @@ mac:
           - opabrow
     NSAppTransportSecurity:
       NSAllowsArbitraryLoads: true
-  entitlements: build/entitlements.mac.plist
-  entitlementsInherit: build/entitlements.mac.plist
-  # notarize 凭证(从环境变量读)
-  # ASC provider 是 App Store Connect 上的 Team ID
-  # notarize:
-  #   teamId: ${env.APPLE_TEAM_ID}
+  entitlements: build/entitlements.direct.plist
+  entitlementsInherit: build/entitlements.direct.plist
 dmg:
   artifactName: ${productName}-${version}-${arch}.${ext}
 linux:
   target: AppImage
-  artifactName: ${productName}-${version}.${ext}
+  icon: build/icon.png
+  artifactName: ${productName}-${version}-${arch}.${ext}
 publish: null

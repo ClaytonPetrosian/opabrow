@@ -37,6 +37,14 @@ The title bar stays transparent until the pointer reaches the top edge. It has i
 | Adjustable opacity and optional always-on-top behavior | Mobile user-agent mode for checking responsive sites |
 | Local-first browsing history with no account or cloud sync | Native macOS menu commands and familiar keyboard shortcuts |
 
+## Download
+
+[Download the latest release](https://github.com/ClaytonPetrosian/opabrow/releases/latest) for macOS, Windows or Linux. Each release includes installers for:
+
+- macOS Apple Silicon (`arm64`) and Intel (`x64`)
+- Windows x64 (`.exe` installer)
+- Linux x64 (`.AppImage`)
+
 ## Get started
 
 ### Requirements
