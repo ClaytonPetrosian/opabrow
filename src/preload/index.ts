@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { clipboard, contextBridge, ipcRenderer } from 'electron';
 
 // 类型导出给 renderer
 export type MenuAction =
@@ -22,6 +22,10 @@ const api = {
   minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
   focusWindow: () => ipcRenderer.invoke('focus-window'),
   startDrag: () => ipcRenderer.invoke('start-drag'),
+
+  // 地址栏使用主进程剪贴板，避免透明无边框窗口下 macOS 原生粘贴失效。
+  readClipboardText: () => clipboard.readText(),
+  writeClipboardText: (text: string) => clipboard.writeText(text),
 
   // 菜单事件订阅
   onMenuAction: (callback: (action: MenuAction, value?: boolean) => void) => {

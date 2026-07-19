@@ -13,6 +13,8 @@ declare namespace Electron {
     goBack(): void;
     goForward(): void;
     reload(): void;
+    getURL(): string;
+    executeJavaScript(code: string): Promise<unknown>;
     canGoBack(): boolean;
     canGoForward(): boolean;
     stop(): void;

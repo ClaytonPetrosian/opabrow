@@ -178,6 +178,19 @@ function buildAppMenu(win: BrowserWindow): Menu {
     ]
   };
 
+  const editMenu: MenuItemConstructorOptions = {
+    label: '编辑',
+    submenu: [
+      { role: 'undo', label: '撤销' },
+      { role: 'redo', label: '重做' },
+      { type: 'separator' },
+      { role: 'cut', label: '剪切' },
+      { role: 'copy', label: '复制' },
+      { role: 'paste', label: '粘贴' },
+      { role: 'selectAll', label: '全选' }
+    ]
+  };
+
   const viewMenu: MenuItemConstructorOptions = {
     label: '视图',
     submenu: [
@@ -231,8 +244,8 @@ function buildAppMenu(win: BrowserWindow): Menu {
   };
 
   const template: MenuItemConstructorOptions[] = isMac
-    ? [appMenu, browseMenu, viewMenu, windowMenu]
-    : [browseMenu, viewMenu, windowMenu];
+    ? [appMenu, editMenu, browseMenu, viewMenu, windowMenu]
+    : [editMenu, browseMenu, viewMenu, windowMenu];
 
   return Menu.buildFromTemplate(template);
 }

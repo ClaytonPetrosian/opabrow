@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Minus, Pin, X } from 'lucide-react';
 
 const HOME_URL = 'https://www.faxianai.com/';
@@ -6,11 +6,13 @@ const DESKTOP_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36 opabrow/0.1';
 const MOBILE_USER_AGENT =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
-const HISTORY_STORAGE_KEY = 'opabrow.navigation-history';
+const HISTORY_STORAGE_KEY = 'opabrow.navigation-history.v2';
 const HISTORY_LIMIT = 100;
+const ADDRESS_SUGGESTION_LIMIT = 5;
 
 type HistoryEntry = {
   url: string;
+  title: string;
   visitedAt: number;
 };
 
@@ -27,12 +29,52 @@ function readHistory(): HistoryEntry[] {
         typeof entry === 'object' &&
         entry !== null &&
         typeof entry.url === 'string' &&
+        typeof entry.title === 'string' &&
         typeof entry.visitedAt === 'number'
     );
   } catch {
     return [];
   }
 }
+
+function isBilibiliVideoUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      (url.hostname === 'www.bilibili.com' || url.hostname === 'bilibili.com') &&
+      (/^\/video\//.test(url.pathname) || /^\/bangumi\/play\//.test(url.pathname))
+    );
+  } catch {
+    return false;
+  }
+}
+
+// B 站播放器异步挂载，轮询其“网页全屏”控件，成功后立即停止。
+const BILIBILI_WEB_FULLSCREEN_SCRIPT = `
+  new Promise((resolve) => {
+    let attempts = 0;
+    const finish = (changed) => {
+      window.clearInterval(timer);
+      resolve(changed);
+    };
+    const timer = window.setInterval(() => {
+      if (document.querySelector('.bpx-player-web-full')) {
+        finish(false);
+        return;
+      }
+
+      const button = document.querySelector('.bpx-player-ctrl-web');
+      if (button instanceof HTMLElement) {
+        button.click();
+        finish(true);
+        return;
+      }
+
+      attempts += 1;
+      if (attempts >= 32) finish(false);
+    }, 250);
+  });
+`;
 
 function formatHistoryUrl(url: string): string {
   try {
@@ -142,6 +184,22 @@ function App() {
     wv.addEventListener('did-navigate', syncUrl);
     wv.addEventListener('did-navigate-in-page', syncUrl);
 
+    const syncTitle = (e: Event) => {
+      const title = (e as unknown as { title?: string }).title;
+      const pageUrl = wv.getURL();
+      if (title && pageUrl) recordHistory(pageUrl, title);
+    };
+    wv.addEventListener('page-title-updated', syncTitle);
+
+    const enterBilibiliWebFullscreen = () => {
+      const pageUrl = wv.getURL();
+      if (!isBilibiliVideoUrl(pageUrl)) return;
+      void wv.executeJavaScript(BILIBILI_WEB_FULLSCREEN_SCRIPT).catch((error) => {
+        console.warn('Bilibili web fullscreen failed:', error);
+      });
+    };
+    wv.addEventListener('did-finish-load', enterBilibiliWebFullscreen);
+
     // 兜底:new-window 事件也拦一次
     wv.addEventListener('new-window', (e) => {
       e.preventDefault();
@@ -170,6 +228,8 @@ function App() {
     return () => {
       resizeObserver.disconnect();
       wv.removeEventListener('dom-ready', onDomReady);
+      wv.removeEventListener('page-title-updated', syncTitle);
+      wv.removeEventListener('did-finish-load', enterBilibiliWebFullscreen);
       wv.remove();
       webviewRef.current = null;
       webviewReadyRef.current = false;
@@ -405,20 +465,81 @@ function App() {
     }
   }
 
-  function recordHistory(nextUrl: string) {
+  function recordHistory(nextUrl: string, title?: string) {
     if (!/^https?:\/\//i.test(nextUrl)) return;
 
-    setHistoryEntries((entries) => [
-      { url: nextUrl, visitedAt: Date.now() },
-      ...entries.filter((entry) => entry.url !== nextUrl)
-    ].slice(0, HISTORY_LIMIT));
+    setHistoryEntries((entries) => {
+      const previous = entries.find((entry) => entry.url === nextUrl);
+      return [
+        {
+          url: nextUrl,
+          title: title?.trim() || previous?.title || formatHistoryUrl(nextUrl),
+          visitedAt: Date.now()
+        },
+        ...entries.filter((entry) => entry.url !== nextUrl)
+      ].slice(0, HISTORY_LIMIT);
+    });
+  }
+
+  function replaceAddressSelection(input: HTMLInputElement, text: string) {
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? start;
+    const caret = start + text.length;
+
+    setUrl((value) => `${value.slice(0, start)}${text}${value.slice(end)}`);
+    setActiveSuggestionIndex(-1);
+    requestAnimationFrame(() => input.setSelectionRange(caret, caret));
+  }
+
+  function handleAddressClipboardShortcut(event: ReactKeyboardEvent<HTMLInputElement>): boolean {
+    const isModifier = event.metaKey || event.ctrlKey;
+    if (!isModifier || event.altKey || event.shiftKey) return false;
+
+    const input = event.currentTarget;
+    const start = input.selectionStart ?? 0;
+    const end = input.selectionEnd ?? start;
+    const selection = input.value.slice(start, end);
+
+    if (event.key.toLowerCase() === 'c') {
+      event.preventDefault();
+      window.opabrow.writeClipboardText(selection);
+      return true;
+    }
+
+    if (event.key.toLowerCase() === 'x') {
+      event.preventDefault();
+      window.opabrow.writeClipboardText(selection);
+      replaceAddressSelection(input, '');
+      return true;
+    }
+
+    if (event.key.toLowerCase() === 'v') {
+      event.preventDefault();
+      const pasteStart = start;
+      const pasteEnd = end;
+      void Promise.resolve(window.opabrow.readClipboardText()).then((text) => {
+        if (!text) return;
+        const caret = pasteStart + text.length;
+        setUrl((value) => `${value.slice(0, pasteStart)}${text}${value.slice(pasteEnd)}`);
+        setActiveSuggestionIndex(-1);
+        requestAnimationFrame(() => input.setSelectionRange(caret, caret));
+      });
+      return true;
+    }
+
+    return false;
   }
 
   const addressQuery = url.trim().toLowerCase();
   const addressSuggestions = addressBarFocused
     ? historyEntries
-        .filter((entry) => !addressQuery || entry.url.toLowerCase().includes(addressQuery))
-        .slice(0, 8)
+        .filter(
+          (entry) =>
+            !addressQuery ||
+            entry.title.toLowerCase().includes(addressQuery) ||
+            entry.url.toLowerCase().includes(addressQuery)
+        )
+        .slice(0, ADDRESS_SUGGESTION_LIMIT)
     : [];
 
   return (
@@ -560,6 +681,7 @@ function App() {
             }}
             onMouseDown={(event) => event.stopPropagation()}
             onKeyDown={(event) => {
+              if (handleAddressClipboardShortcut(event)) return;
               if (event.key === 'ArrowDown' && addressSuggestions.length > 0) {
                 event.preventDefault();
                 setActiveSuggestionIndex((index) => (index + 1) % addressSuggestions.length);
@@ -603,7 +725,8 @@ function App() {
                   }}
                   onClick={() => goUrl(entry.url)}
                 >
-                  <span>{formatHistoryUrl(entry.url)}</span>
+                  <span className="address-suggestion-title">{entry.title}</span>
+                  <span className="address-suggestion-url">{formatHistoryUrl(entry.url)}</span>
                 </button>
               ))}
             </div>
