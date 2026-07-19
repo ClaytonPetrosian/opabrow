@@ -27,10 +27,10 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.42);
+  border: 1px solid transparent;
   border-radius: 18px;
-  background: rgba(238, 242, 247, 0.5);
-  box-shadow: 0 16px 42px rgba(19, 35, 52, 0.2);
+  background: transparent;
+  box-shadow: none;
 }
 
 /* ---------- 顶部 quick bar (命令面板) —— 自适应窗口宽度 ---------- */
@@ -349,10 +349,10 @@ body {
   width: 100%;
   height: 25px;
   padding: 0 10px;
-  border: 1px solid rgba(91, 105, 121, 0.2);
+  border: 1px solid transparent;
   border-radius: 6px;
   outline: none;
-  background: rgba(255, 255, 255, 0.78);
+  background: transparent;
   color: #354052;
   font-family: inherit;
   font-size: 12px;
@@ -385,7 +385,9 @@ body {
 }
 
 .address-suggestion {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 7px;
   width: 100%;
   height: 28px;
   padding: 0 9px;
@@ -397,11 +399,28 @@ body {
   cursor: pointer;
   font-family: inherit;
   font-size: 12px;
-  line-height: 28px;
+  line-height: 1;
   text-align: left;
+  -webkit-app-region: no-drag;
+}
+
+.address-suggestion-title,
+.address-suggestion-url {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  -webkit-app-region: no-drag;
+}
+
+.address-suggestion-title {
+  flex: 0 1 52%;
+  color: #30343a;
+  font-weight: 500;
+}
+
+.address-suggestion-url {
+  flex: 1 1 48%;
+  color: #8a6b5c;
+  font-size: 11px;
 }
 
 .address-suggestion:last-child {
