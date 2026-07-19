@@ -73,7 +73,13 @@ pnpm build:mac
 
 ### Address bar and history
 
-Move the pointer to the top edge or press `Cmd+L`. As you type, opabrow suggests matching pages from the local navigation history. Use the arrow keys to choose a result, then press `Enter`.
+Move the pointer to the top edge or press `Cmd+L`. When idle, the address is a compact, text-sized target, leaving the rest of the title bar free for dragging. Once focused, it expands for editing and accepts standard copy, cut and paste shortcuts.
+
+As you type, opabrow suggests up to five matching pages from the local navigation history. Suggestions place the page title first and the URL second; use the arrow keys to choose a result, then press `Enter`.
+
+### Bilibili video pages
+
+Opening a Bilibili video or Bangumi playback page automatically switches the player to its web fullscreen mode. The video fills the available page area while staying inside the opabrow window.
 
 ### Window controls that do not steal space
 
