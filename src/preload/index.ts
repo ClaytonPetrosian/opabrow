@@ -5,6 +5,8 @@ export type MenuAction =
   | 'go_url'
   | 'reload'
   | 'home'
+  | 'set_home'
+  | 'reset_home'
   | 'go_back'
   | 'go_forward'
   | 'ontop_toggle'

@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Minus, Pin, X } from 'lucide-react';
 
-const HOME_URL = 'https://www.faxianai.com/';
+const DEFAULT_HOME_URL = 'https://github.com/ClaytonPetrosian/opabrow';
 const DESKTOP_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36 opabrow/0.1';
 const MOBILE_USER_AGENT =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 const HISTORY_STORAGE_KEY = 'opabrow.navigation-history.v2';
+const HOME_URL_STORAGE_KEY = 'opabrow.home-url';
 const HISTORY_LIMIT = 100;
 const ADDRESS_SUGGESTION_LIMIT = 5;
 
@@ -34,6 +35,15 @@ function readHistory(): HistoryEntry[] {
     );
   } catch {
     return [];
+  }
+}
+
+function readHomeUrl(): string {
+  try {
+    const stored = localStorage.getItem(HOME_URL_STORAGE_KEY);
+    return stored && /^https?:\/\//i.test(stored) ? stored : DEFAULT_HOME_URL;
+  } catch {
+    return DEFAULT_HOME_URL;
   }
 }
 
@@ -86,8 +96,9 @@ function formatHistoryUrl(url: string): string {
 }
 
 function App() {
-  const [url, setUrl] = useState(HOME_URL);
-  const [currentUrl, setCurrentUrl] = useState(HOME_URL);
+  const [homeUrl, setHomeUrl] = useState(readHomeUrl);
+  const [url, setUrl] = useState(readHomeUrl);
+  const [currentUrl, setCurrentUrl] = useState(readHomeUrl);
   const [showQuickBar, setShowQuickBar] = useState(false);
   const [opacity, setOpacity] = useState(1.0);
   const [onTop, setOnTop] = useState(false);
@@ -102,6 +113,7 @@ function App() {
   const webviewContainerRef = useRef<HTMLDivElement>(null);
   const quickInputRef = useRef<HTMLInputElement>(null);
   const addressInputRef = useRef<HTMLInputElement>(null);
+  const homeUrlRef = useRef(homeUrl);
 
   const loadInWebview = (targetUrl: string) => {
     const wv = webviewRef.current;
@@ -136,6 +148,11 @@ function App() {
   useEffect(() => {
     localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(historyEntries));
   }, [historyEntries]);
+
+  useEffect(() => {
+    homeUrlRef.current = homeUrl;
+    localStorage.setItem(HOME_URL_STORAGE_KEY, homeUrl);
+  }, [homeUrl]);
 
   // 挂载 webview (动态创建,绕过 React 编译对 <webview> tag 的处理)
   useEffect(() => {
@@ -273,7 +290,15 @@ function App() {
           reload();
           break;
         case 'home':
-          goUrl(HOME_URL);
+          goUrl(homeUrlRef.current);
+          break;
+        case 'set_home': {
+          const pageUrl = webviewRef.current?.getURL() || currentUrl;
+          if (/^https?:\/\//i.test(pageUrl)) setHomeUrl(pageUrl);
+          break;
+        }
+        case 'reset_home':
+          setHomeUrl(DEFAULT_HOME_URL);
           break;
         case 'go_back':
           try {
@@ -416,7 +441,7 @@ function App() {
       // ⌘⇧H 回到主页
       if (e.key.toLowerCase() === 'h' && e.shiftKey && !e.altKey) {
         e.preventDefault();
-        void goUrl(HOME_URL);
+        void goUrl(homeUrlRef.current);
         return;
       }
       // ⌘L

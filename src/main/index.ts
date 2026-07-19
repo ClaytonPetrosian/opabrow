@@ -174,6 +174,15 @@ function buildAppMenu(win: BrowserWindow): Menu {
         label: '回到主页',
         accelerator: 'CmdOrCtrl+Shift+H',
         click: () => win.webContents.send('menu-action', 'home')
+      },
+      { type: 'separator' },
+      {
+        label: '将当前页面设为主页',
+        click: () => win.webContents.send('menu-action', 'set_home')
+      },
+      {
+        label: '恢复项目主页',
+        click: () => win.webContents.send('menu-action', 'reset_home')
       }
     ]
   };

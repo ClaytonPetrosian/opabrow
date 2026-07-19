@@ -77,6 +77,8 @@ Move the pointer to the top edge or press `Cmd+L`. When idle, the address is a c
 
 As you type, opabrow suggests up to five matching pages from the local navigation history. Suggestions place the page title first and the URL second; use the arrow keys to choose a result, then press `Enter`.
 
+The default home page is the opabrow project repository. In the **Browse** menu, choose **Set current page as home** to make any visited page your local home page, or **Restore project home** to reset it.
+
 ### Bilibili video pages
 
 Opening a Bilibili video or Bangumi playback page automatically switches the player to its web fullscreen mode. The video fills the available page area while staying inside the opabrow window.
