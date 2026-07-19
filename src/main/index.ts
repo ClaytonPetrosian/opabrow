@@ -1,9 +1,19 @@
-import { app, BrowserWindow, shell, ipcMain, Menu, MenuItemConstructorOptions, screen } from 'electron';
+import { app, BrowserWindow, dialog, shell, ipcMain, Menu, MenuItemConstructorOptions, screen } from 'electron';
 import { join } from 'node:path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
+import {
+  BookmarkNode,
+  BookmarkStore,
+  importChromeBookmarksFromDisk,
+  importHtmlBookmarksFromFile,
+  importSafariBookmarksFromDisk
+} from './bookmarks';
 
 // ---------- 窗口引用 ----------
 let mainWindow: BrowserWindow | null = null;
+let bookmarkStore: BookmarkStore | null = null;
+let mobileModeEnabled = false;
+let ipcHandlersRegistered = false;
 const TITLEBAR_HEIGHT = 32;
 
 // ---------- 全局拦截所有 webContents 的新窗口请求 ----------
@@ -125,7 +135,47 @@ function installTitlebarHoverTracking(win: BrowserWindow): void {
 }
 
 // ---------- macOS 顶部菜单栏 ----------
-function buildAppMenu(win: BrowserWindow): Menu {
+function bookmarkMenuItems(nodes: BookmarkNode[], win: BrowserWindow): MenuItemConstructorOptions[] {
+  return nodes.map((node) => {
+    if (node.type === 'folder') {
+      return {
+        label: node.title,
+        submenu: bookmarkMenuItems(node.children, win)
+      };
+    }
+
+    return {
+      label: node.title,
+      toolTip: node.url,
+      click: () => win.webContents.send('menu-action', 'bookmark_open', node.url)
+    };
+  });
+}
+
+function refreshApplicationMenu(): void {
+  if (!mainWindow || mainWindow.isDestroyed() || !bookmarkStore) return;
+  Menu.setApplicationMenu(buildAppMenu(mainWindow, bookmarkStore));
+}
+
+async function showImportResult(win: BrowserWindow, source: string, importBookmarks: () => Promise<number>): Promise<void> {
+  try {
+    const added = await importBookmarks();
+    refreshApplicationMenu();
+    await dialog.showMessageBox(win, {
+      type: 'info',
+      title: '收藏导入完成',
+      message: added > 0 ? `${source} 收藏已导入 ${added} 条链接。` : `${source} 中没有新的收藏链接。`
+    });
+  } catch (error) {
+    await dialog.showMessageBox(win, {
+      type: 'warning',
+      title: '无法导入收藏',
+      message: error instanceof Error ? error.message : '导入过程中发生未知错误。'
+    });
+  }
+}
+
+function buildAppMenu(win: BrowserWindow, bookmarks: BookmarkStore): Menu {
   const isMac = process.platform === 'darwin';
 
   const appMenu: MenuItemConstructorOptions = {
@@ -187,6 +237,79 @@ function buildAppMenu(win: BrowserWindow): Menu {
     ]
   };
 
+  const bookmarksMenu: MenuItemConstructorOptions = {
+    label: '收藏',
+    submenu: [
+      {
+        label: '收藏 / 取消收藏当前页面',
+        accelerator: 'CmdOrCtrl+D',
+        click: () => win.webContents.send('menu-action', 'bookmark_toggle')
+      },
+      { type: 'separator' },
+      ...bookmarkMenuItems(bookmarks.getItems(), win),
+      { type: 'separator' },
+      {
+        label: '从 Chrome 导入…',
+        click: () => {
+          void showImportResult(win, 'Chrome', async () => {
+            const imported = await importChromeBookmarksFromDisk();
+            return bookmarks.importFolder(imported);
+          });
+        }
+      },
+      {
+        label: '从 Safari 导入…',
+        click: () => {
+          void showImportResult(win, 'Safari', async () => {
+            const imported = await importSafariBookmarksFromDisk();
+            return bookmarks.importFolder(imported);
+          });
+        }
+      },
+      {
+        label: '导入书签 HTML…',
+        click: () => {
+          void (async () => {
+            const selection = await dialog.showOpenDialog(win, {
+              title: '导入书签 HTML',
+              buttonLabel: '导入',
+              properties: ['openFile'],
+              filters: [
+                { name: '书签 HTML', extensions: ['html', 'htm'] },
+                { name: '所有文件', extensions: ['*'] }
+              ]
+            });
+            if (selection.canceled || selection.filePaths.length === 0) return;
+            await showImportResult(win, 'HTML', async () => {
+              const imported = await importHtmlBookmarksFromFile(selection.filePaths[0]);
+              return bookmarks.importFolder(imported);
+            });
+          })().catch((error) => console.warn('Could not select bookmark HTML:', error));
+        }
+      },
+      { type: 'separator' },
+      {
+        label: '清空全部收藏…',
+        enabled: bookmarks.getItems().length > 0,
+        click: () => {
+          void (async () => {
+            const result = await dialog.showMessageBox(win, {
+              type: 'warning',
+              title: '清空全部收藏',
+              message: '确定要删除所有本机收藏吗？此操作无法撤销。',
+              buttons: ['取消', '清空'],
+              defaultId: 0,
+              cancelId: 0
+            });
+            if (result.response !== 1) return;
+            await bookmarks.clear();
+            refreshApplicationMenu();
+          })().catch((error) => console.warn('Could not clear bookmarks:', error));
+        }
+      }
+    ]
+  };
+
   const editMenu: MenuItemConstructorOptions = {
     label: '编辑',
     submenu: [
@@ -212,8 +335,11 @@ function buildAppMenu(win: BrowserWindow): Menu {
       {
         label: '手机模式访问网页',
         type: 'checkbox',
-        checked: false,
-        click: (menuItem) => win.webContents.send('menu-action', 'mobile_mode_toggle', menuItem.checked)
+        checked: mobileModeEnabled,
+        click: (menuItem) => {
+          mobileModeEnabled = menuItem.checked;
+          win.webContents.send('menu-action', 'mobile_mode_toggle', menuItem.checked);
+        }
       },
       { type: 'separator' },
       {
@@ -253,72 +379,88 @@ function buildAppMenu(win: BrowserWindow): Menu {
   };
 
   const template: MenuItemConstructorOptions[] = isMac
-    ? [appMenu, editMenu, browseMenu, viewMenu, windowMenu]
-    : [editMenu, browseMenu, viewMenu, windowMenu];
+    ? [appMenu, editMenu, browseMenu, bookmarksMenu, viewMenu, windowMenu]
+    : [editMenu, browseMenu, bookmarksMenu, viewMenu, windowMenu];
 
   return Menu.buildFromTemplate(template);
 }
 
 // ---------- IPC handlers ----------
-function registerIpc(win: BrowserWindow): void {
+function registerIpc(bookmarks: BookmarkStore): void {
+  if (ipcHandlersRegistered) return;
+  ipcHandlersRegistered = true;
+
   // 设置窗口透明度 0.1 - 1.0
   ipcMain.handle('set-opacity', (_e, opacity: number) => {
     const v = Math.max(0.1, Math.min(1.0, opacity));
-    win.setOpacity(v);
+    mainWindow?.setOpacity(v);
     return v;
   });
 
   // 设置窗口置顶
   ipcMain.handle('set-always-on-top', (_e, onTop: boolean) => {
-    win.setAlwaysOnTop(onTop, onTop ? 'floating' : 'normal');
+    mainWindow?.setAlwaysOnTop(onTop, onTop ? 'floating' : 'normal');
     return onTop;
   });
 
   // 关闭
   ipcMain.handle('close-window', () => {
-    win.close();
+    mainWindow?.close();
   });
 
   // 最小化
   ipcMain.handle('minimize-window', () => {
-    win.minimize();
+    mainWindow?.minimize();
   });
 
   // 强制激活(透明窗口有时需要)
   ipcMain.handle('focus-window', () => {
-    if (win.isMinimized()) win.restore();
-    win.show();
-    win.focus();
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
   });
 
   // 手动开始拖动窗口 —— CSS -webkit-app-region: drag 在透明窗口上有时不灵,这里手动调
   ipcMain.handle('start-drag', () => {
     try {
-      (win as BrowserWindow & { startDragging?: () => void }).startDragging?.();
+      (mainWindow as (BrowserWindow & { startDragging?: () => void }) | null)?.startDragging?.();
     } catch (e) {
       // 某些情况下 startDragging 抛错,忽略
     }
   });
+
+  ipcMain.handle('toggle-bookmark', async (_event, page: unknown) => {
+    if (!page || typeof page !== 'object') throw new Error('Invalid bookmark page.');
+    const { url, title } = page as { url?: unknown; title?: unknown };
+    if (typeof url !== 'string') throw new Error('Invalid bookmark URL.');
+
+    const bookmarked = await bookmarks.toggle(url, typeof title === 'string' ? title : '');
+    refreshApplicationMenu();
+    return bookmarked;
+  });
 }
 
 // ---------- App 生命周期 ----------
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.tan.opabrow');
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window);
   });
 
-  mainWindow = createMainWindow();
-  registerIpc(mainWindow);
+  bookmarkStore = new BookmarkStore(join(app.getPath('userData'), 'bookmarks.json'));
+  await bookmarkStore.load();
 
-  Menu.setApplicationMenu(buildAppMenu(mainWindow));
+  mainWindow = createMainWindow();
+  registerIpc(bookmarkStore);
+
+  refreshApplicationMenu();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       mainWindow = createMainWindow();
-      registerIpc(mainWindow);
-      Menu.setApplicationMenu(buildAppMenu(mainWindow));
+      refreshApplicationMenu();
     }
   });
 });
