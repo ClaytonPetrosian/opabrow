@@ -23,7 +23,7 @@ jobs:
             artifact: macos-arm64
             files: dist/*.dmg
           - label: macOS Intel
-            os: macos-13
+            os: macos-14
             command: package:mac:x64
             artifact: macos-x64
             files: dist/*.dmg
