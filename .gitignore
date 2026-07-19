@@ -1,0 +1,13 @@
+node_modules/
+out/
+dist/
+release/
+
+*.tsbuildinfo
+.DS_Store
+.env
+.env.*
+!.env.example
+
+HANDOFF.md
+.vscode/

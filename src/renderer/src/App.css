@@ -1,0 +1,378 @@
+/* opabrow renderer styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root,
+.app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', sans-serif;
+  color: #fff;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+.app {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+}
+
+/* ---------- 顶部 quick bar (命令面板) —— 自适应窗口宽度 ---------- */
+.quick-bar {
+  position: absolute;
+  top: 40px; /* 标题栏下方 8px */
+  left: 8px;
+  right: 8px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(28, 28, 30, 0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  min-width: 0;
+  max-width: none;
+  width: auto;
+  -webkit-app-region: no-drag;
+  box-sizing: border-box;
+}
+
+.quick-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.quick-input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 12px;
+  outline: none;
+}
+
+.quick-input:focus {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(100, 160, 255, 0.5);
+}
+
+.quick-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.quick-btn {
+  height: 26px;
+  padding: 0 10px;
+  background: rgba(100, 160, 255, 0.25);
+  border: 1px solid rgba(100, 160, 255, 0.4);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 11px;
+  cursor: pointer;
+  outline: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.quick-btn:hover {
+  background: rgba(100, 160, 255, 0.4);
+}
+
+.quick-btn.close {
+  background: rgba(255, 80, 80, 0.2);
+  border-color: rgba(255, 80, 80, 0.35);
+  width: 26px;
+  padding: 0;
+}
+
+
+/* ---------- 透明度对话框 ---------- */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.2);
+  -webkit-app-region: no-drag;
+}
+
+.opacity-dialog {
+  width: min(320px, 100%);
+  padding: 16px;
+  background: rgba(36, 36, 38, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.38);
+}
+
+.dialog-heading,
+.opacity-control {
+  display: flex;
+  align-items: center;
+}
+
+.dialog-heading {
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.dialog-heading h2 {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dialog-close {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dialog-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.opacity-control {
+  gap: 14px;
+}
+
+.opacity-slider {
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  appearance: none;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.opacity-slider::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  appearance: none;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.opacity-control output {
+  width: 38px;
+  color: #fff;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.quick-toggle {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  cursor: pointer;
+  outline: none;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quick-toggle:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.quick-toggle.on {
+  background: rgba(255, 180, 50, 0.25);
+  border-color: rgba(255, 180, 50, 0.5);
+  color: rgba(255, 220, 150, 1);
+}
+
+/* ---------- 独立标题栏 ---------- */
+.titlebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 32px;
+  z-index: 9997;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  background: rgba(245, 245, 247, 0.92);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  opacity: 0;
+  pointer-events: auto;
+  -webkit-app-region: drag;
+  transition: opacity 180ms ease;
+}
+
+.titlebar.visible {
+  opacity: 1;
+}
+
+.traffic-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  -webkit-app-region: drag;
+}
+
+.traffic-button {
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 0.5px solid rgba(0, 0, 0, 0.15);
+  border-radius: 50%;
+  cursor: pointer;
+  outline: none;
+  -webkit-app-region: no-drag;
+}
+
+.traffic-button.close {
+  background: #ff5f57;
+}
+
+.traffic-button.minimize {
+  background: #febc2e;
+}
+
+.traffic-button:hover {
+  filter: brightness(0.94);
+}
+
+.titlebar-address {
+  position: relative;
+  flex: 0 1 360px;
+  min-width: 0;
+  margin-left: 24px;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-address-input {
+  display: block;
+  width: 100%;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 3px;
+  outline: none;
+  background: rgba(255, 255, 255, 0.72);
+  color: #313136;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 24px;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-address-input:focus {
+  border-color: rgba(0, 122, 255, 0.72);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.14);
+}
+
+.titlebar-address-input::placeholder {
+  color: rgba(49, 49, 54, 0.5);
+}
+
+.address-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 1;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.13);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+  -webkit-app-region: no-drag;
+}
+
+.address-suggestion {
+  display: block;
+  width: 100%;
+  height: 28px;
+  padding: 0 9px;
+  overflow: hidden;
+  border: 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: transparent;
+  color: #313136;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 28px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
+}
+
+.address-suggestion:last-child {
+  border-bottom: 0;
+}
+
+.address-suggestion:hover,
+.address-suggestion.active {
+  background: rgba(0, 122, 255, 0.1);
+}
+
+/* ---------- webview 容器 ---------- */
+.webview-container {
+  position: absolute;
+  top: 32px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.webview {
+  /* webview 元素由 JS 动态创建,尺寸跟随标题栏下方的容器。 */
+  flex: 1 1 auto;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}

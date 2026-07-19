@@ -1,0 +1,52 @@
+appId: com.tan.opabrow
+productName: opabrow
+copyright: Copyright © 2026 tan
+directories:
+  buildResources: build
+  output: dist
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+asarUnpack:
+  - resources/**
+win:
+  target: nsis
+  artifactName: ${productName}-Setup-${version}.${ext}
+mac:
+  category: public.app-category.utilities
+  icon: build/icon.icns
+  target:
+    # MAS (Mac App Store) 格式 - 必须用 mas target 才能上架 App Store
+    - target: mas
+      arch:
+        - arm64
+        - x64
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  # App Store 上架必备
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  extendInfo:
+    NSHumanReadableCopyright: Copyright © 2026 tan. All rights reserved.
+    LSApplicationCategoryType: public.app-category.utilities
+    CFBundleURLTypes:
+      - CFBundleURLName: opabrow.url
+        CFBundleURLSchemes:
+          - opabrow
+    NSAppTransportSecurity:
+      NSAllowsArbitraryLoads: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # notarize 凭证(从环境变量读)
+  # ASC provider 是 App Store Connect 上的 Team ID
+  # notarize:
+  #   teamId: ${env.APPLE_TEAM_ID}
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+linux:
+  target: AppImage
+  artifactName: ${productName}-${version}.${ext}
+publish: null
