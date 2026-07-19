@@ -16,7 +16,9 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web"
   },
-  "dependencies": {},
+  "dependencies": {
+    "lucide-react": "^1.25.0"
+  },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@electron-toolkit/utils": "^4.0.0",

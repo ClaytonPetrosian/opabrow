@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Minus, Pin, X } from 'lucide-react';
 
 const HOME_URL = 'https://www.faxianai.com/';
 const DESKTOP_USER_AGENT =
@@ -514,7 +515,9 @@ function App() {
             title="关闭窗口 (⌘W)"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={() => window.opabrow.closeWindow()}
-          />
+          >
+            <X className="traffic-icon" size={9} strokeWidth={2.8} aria-hidden="true" />
+          </button>
           <button
             type="button"
             className="traffic-button minimize"
@@ -522,7 +525,20 @@ function App() {
             title="最小化窗口 (⌘M)"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={() => window.opabrow.minimizeWindow()}
-          />
+          >
+            <Minus className="traffic-icon" size={10} strokeWidth={2.8} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={`titlebar-icon-button ${onTop ? 'active' : ''}`}
+            aria-label={onTop ? '取消置顶' : '置顶窗口'}
+            aria-pressed={onTop}
+            title={onTop ? '取消置顶 (⌘T)' : '置顶窗口 (⌘T)'}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={() => setOnTop((value) => !value)}
+          >
+            <Pin size={14} strokeWidth={2} aria-hidden="true" />
+          </button>
         </div>
         <div className="titlebar-address">
           <input
@@ -592,6 +608,26 @@ function App() {
               ))}
             </div>
           )}
+        </div>
+        <div
+          className="titlebar-opacity"
+          title="窗口透明度"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <input
+            className="titlebar-opacity-slider"
+            aria-label="窗口透明度"
+            type="range"
+            min={0.1}
+            max={1}
+            step={0.01}
+            value={opacity}
+            style={{
+              background: `linear-gradient(90deg, #3b82f6 0%, #60a5fa ${opacity * 100}%, rgba(90, 103, 119, 0.18) ${opacity * 100}%, rgba(90, 103, 119, 0.18) 100%)`
+            }}
+            onChange={(event) => setOpacity(parseFloat(event.target.value))}
+          />
+          <output>{Math.round(opacity * 100)}%</output>
         </div>
       </div>
 

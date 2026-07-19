@@ -37,7 +37,7 @@ function createMainWindow(): BrowserWindow {
     frame: false,
     titleBarStyle: 'hiddenInset', // macOS 隐藏标题栏
     trafficLightPosition: { x: -100, y: -100 }, // 把红绿黄按钮挪出可见区
-    hasShadow: false,
+    hasShadow: true,
     backgroundColor: '#00000000', // 完全透明
     movable: true, // 允许拖动
     resizable: true,
