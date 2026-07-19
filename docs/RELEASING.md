@@ -19,10 +19,11 @@ git push origin v1.2.3
 ```
 
 工作流完成后，所有平台的安装包会出现在 GitHub Releases 页面。
+每个 Release 还会附带 `SHA256SUMS.txt`，用于验证下载文件的完整性。
 
 ## 可选的代码签名
 
-不配置证书时，工作流仍会生成可下载的安装包。为了让 macOS 和 Windows 用户获得更顺畅的首次运行体验，请在仓库的 `Settings > Secrets and variables > Actions` 配置以下 Secrets：
+不配置证书时，工作流仍会生成可下载的安装包。为了让 macOS 和 Windows 用户获得更顺畅的首次运行体验，请在仓库的 `Settings > Secrets and variables > Actions` 配置以下 Secrets。工作流只会在这些 Secret 实际存在时把它们传给打包工具：
 
 | 平台 | Secret | 用途 |
 | --- | --- | --- |
