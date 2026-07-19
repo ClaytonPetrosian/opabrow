@@ -201,6 +201,73 @@ body {
   text-align: right;
 }
 
+.password-picker {
+  width: min(360px, calc(100vw - 32px));
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  background: rgba(30, 33, 38, 0.96);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.38);
+  color: #fff;
+  -webkit-app-region: no-drag;
+}
+
+.password-picker-origin {
+  margin: 6px 0 12px;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.password-picker-options {
+  display: grid;
+  gap: 6px;
+  max-height: 224px;
+  overflow: auto;
+}
+
+.password-picker-option {
+  width: 100%;
+  min-height: 32px;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.password-picker-option:hover,
+.password-picker-option:focus-visible {
+  border-color: rgba(96, 165, 250, 0.72);
+  background: rgba(59, 130, 246, 0.22);
+  outline: none;
+}
+
+.password-status {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 10000;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 7px;
+  background: rgba(30, 33, 38, 0.9);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  color: #fff;
+  font-size: 12px;
+  -webkit-app-region: no-drag;
+}
+
 .quick-toggle {
   flex: 1;
   min-width: 0;

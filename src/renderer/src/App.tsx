@@ -17,6 +17,12 @@ type HistoryEntry = {
   visitedAt: number;
 };
 
+type PasswordMatch = {
+  id: string;
+  origin: string;
+  username: string;
+};
+
 function readHistory(): HistoryEntry[] {
   try {
     const stored = localStorage.getItem(HISTORY_STORAGE_KEY);
@@ -86,6 +92,37 @@ const BILIBILI_WEB_FULLSCREEN_SCRIPT = `
   });
 `;
 
+function passwordFillScript(username: string, password: string): string {
+  return `(() => {
+    const username = ${JSON.stringify(username)};
+    const password = ${JSON.stringify(password)};
+    const visible = (element) => {
+      const style = window.getComputedStyle(element);
+      return style.display !== 'none' && style.visibility !== 'hidden' && element.getClientRects().length > 0;
+    };
+    const setValue = (element, value) => {
+      const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+      if (setter) setter.call(element, value);
+      else element.value = value;
+      element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }));
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    const inputs = Array.from(document.querySelectorAll('input:not([disabled]), textarea:not([disabled])')).filter(visible);
+    const passwordInput = inputs.find((element) => element instanceof HTMLInputElement && element.type === 'password');
+    if (!passwordInput) return { filled: false, reason: 'password-field-not-found' };
+    const usernameInput = inputs.find((element) => {
+      if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement)) return false;
+      if (element === passwordInput) return false;
+      const descriptor = [element.name, element.id, element.autocomplete, element.type].join(' ').toLowerCase();
+      return element.autocomplete === 'username' || /user|email|login|account|phone/.test(descriptor);
+    });
+    if (usernameInput && username) setValue(usernameInput, username);
+    setValue(passwordInput, password);
+    return { filled: true, usernameFilled: Boolean(usernameInput && username) };
+  })()`;
+}
+
 function formatHistoryUrl(url: string): string {
   try {
     const parsed = new URL(url);
@@ -108,6 +145,9 @@ function App() {
   const [addressBarFocused, setAddressBarFocused] = useState(false);
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>(readHistory);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
+  const [passwordMatches, setPasswordMatches] = useState<PasswordMatch[] | null>(null);
+  const [passwordFillUrl, setPasswordFillUrl] = useState('');
+  const [passwordStatus, setPasswordStatus] = useState<string | null>(null);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const webviewReadyRef = useRef(false);
   const webviewContainerRef = useRef<HTMLDivElement>(null);
@@ -312,6 +352,9 @@ function App() {
         case 'bookmark_open':
           if (typeof value === 'string') goUrl(value);
           break;
+        case 'password_fill':
+          void requestPasswordFill();
+          break;
         case 'go_back':
           try {
             webviewRef.current?.goBack();
@@ -353,7 +396,8 @@ function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (showOpacityDialog) setShowOpacityDialog(false);
+        if (passwordMatches) setPasswordMatches(null);
+        else if (showOpacityDialog) setShowOpacityDialog(false);
         else if (showQuickBar) setShowQuickBar(false);
       }
     };
@@ -499,6 +543,55 @@ function App() {
       webviewRef.current?.reload();
     } catch (e) {
       console.warn('reload failed:', e);
+    }
+  }
+
+  function showPasswordStatus(message: string) {
+    setPasswordStatus(message);
+    window.setTimeout(() => {
+      setPasswordStatus((current) => (current === message ? null : current));
+    }, 3_500);
+  }
+
+  async function requestPasswordFill() {
+    const pageUrl = webviewRef.current?.getURL() || currentUrl;
+    const matches = await window.opabrow.listPasswordMatches(pageUrl);
+    if (matches.length === 0) {
+      showPasswordStatus('此 HTTPS 页面没有可用的已保存密码。');
+      return;
+    }
+
+    if (matches.length === 1) {
+      await fillPassword(matches[0], pageUrl);
+      return;
+    }
+
+    setPasswordFillUrl(pageUrl);
+    setPasswordMatches(matches);
+  }
+
+  async function fillPassword(match: PasswordMatch, pageUrl: string) {
+    try {
+      const credential = await window.opabrow.getPasswordForFill({ id: match.id, url: pageUrl });
+      if (!credential) {
+        showPasswordStatus('该密码不再匹配当前页面。');
+        return;
+      }
+
+      const webview = webviewRef.current;
+      if (!webview || webview.getURL() !== pageUrl) {
+        showPasswordStatus('页面已变化，请重新选择“填充当前页面”。');
+        return;
+      }
+
+      const result = (await webview.executeJavaScript(passwordFillScript(credential.username, credential.password))) as {
+        filled?: boolean;
+      };
+      showPasswordStatus(result?.filled ? '已填充当前页面的登录信息。' : '没有找到可填充的密码输入框。');
+    } catch {
+      showPasswordStatus('无法填充该页面，请确认 macOS 钥匙串可用。');
+    } finally {
+      setPasswordMatches(null);
     }
   }
 
@@ -656,6 +749,48 @@ function App() {
         </div>
       )}
 
+      {passwordMatches && (
+        <div
+          className="dialog-backdrop"
+          role="presentation"
+          onMouseDown={() => setPasswordMatches(null)}
+        >
+          <section
+            className="password-picker"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="password-picker-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="dialog-heading">
+              <h2 id="password-picker-title">选择要填充的账号</h2>
+              <button
+                type="button"
+                className="dialog-close"
+                aria-label="关闭"
+                title="关闭 (ESC)"
+                onClick={() => setPasswordMatches(null)}
+              >
+                ×
+              </button>
+            </div>
+            <p className="password-picker-origin">{new URL(passwordFillUrl).host}</p>
+            <div className="password-picker-options">
+              {passwordMatches.map((match) => (
+                <button
+                  key={match.id}
+                  type="button"
+                  className="password-picker-option"
+                  onClick={() => void fillPassword(match, passwordFillUrl)}
+                >
+                  {match.username || '未命名账号'}
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
+
       {/* 顶部 32px 独立标题栏:始终占位,默认透明,不覆盖网页区域。 */}
       <div
         className={`titlebar ${titlebarVisible || addressBarFocused ? 'visible' : ''}`}
@@ -805,6 +940,7 @@ function App() {
 
       {/* webview 容器:从标题栏下方开始,网页大小不受标题栏显隐影响。 */}
       <div className="webview-container" ref={webviewContainerRef} />
+      {passwordStatus && <div className="password-status" role="status">{passwordStatus}</div>}
     </div>
   );
 }

@@ -22,6 +22,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "csv-parse": "^7.0.1",
     "lucide-react": "^1.25.0",
     "parse5": "^8.0.1"
   },
