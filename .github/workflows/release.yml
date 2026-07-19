@@ -21,18 +21,22 @@ jobs:
             os: macos-14
             command: package:mac:arm64
             artifact: macos-arm64
+            files: dist/*.dmg
           - label: macOS Intel
             os: macos-13
             command: package:mac:x64
             artifact: macos-x64
+            files: dist/*.dmg
           - label: Windows x64
             os: windows-latest
             command: package:win:x64
             artifact: windows-x64
+            files: dist/*.exe
           - label: Linux x64
             os: ubuntu-latest
             command: package:linux:x64
             artifact: linux-x64
+            files: dist/*.AppImage
 
     steps:
       - uses: actions/checkout@v4
@@ -46,20 +50,38 @@ jobs:
       - name: Verify types
         run: pnpm typecheck
       - name: Package application
-        run: pnpm ${{ matrix.command }}
+        shell: bash
+        run: |
+          if [[ -n "$RELEASE_MAC_CSC_LINK" ]]; then
+            export CSC_LINK="$RELEASE_MAC_CSC_LINK"
+            export CSC_KEY_PASSWORD="$RELEASE_MAC_CSC_KEY_PASSWORD"
+          fi
+
+          if [[ -n "$RELEASE_APPLE_ID" && -n "$RELEASE_APPLE_APP_SPECIFIC_PASSWORD" && -n "$RELEASE_APPLE_TEAM_ID" ]]; then
+            export APPLE_ID="$RELEASE_APPLE_ID"
+            export APPLE_APP_SPECIFIC_PASSWORD="$RELEASE_APPLE_APP_SPECIFIC_PASSWORD"
+            export APPLE_TEAM_ID="$RELEASE_APPLE_TEAM_ID"
+          fi
+
+          if [[ -n "$RELEASE_WIN_CSC_LINK" ]]; then
+            export WIN_CSC_LINK="$RELEASE_WIN_CSC_LINK"
+            export WIN_CSC_KEY_PASSWORD="$RELEASE_WIN_CSC_KEY_PASSWORD"
+          fi
+
+          pnpm ${{ matrix.command }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          RELEASE_MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          RELEASE_MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          RELEASE_APPLE_ID: ${{ secrets.APPLE_ID }}
+          RELEASE_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          RELEASE_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          RELEASE_WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          RELEASE_WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: dist/*
+          path: ${{ matrix.files }}
           if-no-files-found: error
 
   publish:
@@ -71,6 +93,9 @@ jobs:
         with:
           path: release-artifacts
           merge-multiple: true
+      - name: Generate checksums
+        working-directory: release-artifacts
+        run: sha256sum * > SHA256SUMS.txt
       - name: Create or update release
         env:
           GH_TOKEN: ${{ github.token }}
