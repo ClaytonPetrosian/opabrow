@@ -336,12 +336,38 @@ body {
 
 .titlebar-address {
   position: relative;
-  flex: 1 1 360px;
-  width: min(500px, 100%);
+  flex: 0 1 auto;
+  width: fit-content;
   max-width: 500px;
-  min-width: 160px;
   margin-left: 18px;
   -webkit-app-region: no-drag;
+}
+
+.titlebar-address:has(.titlebar-address-input) {
+  flex-basis: min(500px, 100%);
+  width: min(500px, 100%);
+}
+
+.titlebar-address-preview {
+  display: block;
+  max-width: 500px;
+  padding: 0 4px;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: #354052;
+  cursor: text;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 25px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-address-preview:hover {
+  color: #1f2c3d;
 }
 
 .titlebar-address-input {

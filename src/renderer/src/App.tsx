@@ -662,54 +662,66 @@ function App() {
           </button>
         </div>
         <div className="titlebar-address">
-          <input
-            ref={addressInputRef}
-            className="titlebar-address-input"
-            type="text"
-            value={url}
-            onChange={(event) => {
-              setUrl(event.target.value);
-              setActiveSuggestionIndex(-1);
-            }}
-            onFocus={() => {
-              setAddressBarFocused(true);
-              setActiveSuggestionIndex(-1);
-            }}
-            onBlur={() => {
-              setAddressBarFocused(false);
-              setActiveSuggestionIndex(-1);
-            }}
-            onMouseDown={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              if (handleAddressClipboardShortcut(event)) return;
-              if (event.key === 'ArrowDown' && addressSuggestions.length > 0) {
-                event.preventDefault();
-                setActiveSuggestionIndex((index) => (index + 1) % addressSuggestions.length);
-                return;
-              }
-              if (event.key === 'ArrowUp' && addressSuggestions.length > 0) {
-                event.preventDefault();
-                setActiveSuggestionIndex((index) =>
-                  index <= 0 ? addressSuggestions.length - 1 : index - 1
-                );
-                return;
-              }
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                const suggestion = addressSuggestions[activeSuggestionIndex];
-                goUrl(suggestion?.url);
-                return;
-              }
-              if (event.key === 'Escape') {
-                event.preventDefault();
-                setUrl(currentUrl);
-                event.currentTarget.blur();
-              }
-            }}
-            aria-label="地址栏"
-            placeholder="输入网址或搜索词"
-            spellCheck={false}
-          />
+          {addressBarFocused ? (
+            <input
+              ref={addressInputRef}
+              className="titlebar-address-input"
+              type="text"
+              value={url}
+              onChange={(event) => {
+                setUrl(event.target.value);
+                setActiveSuggestionIndex(-1);
+              }}
+              onFocus={() => {
+                setAddressBarFocused(true);
+                setActiveSuggestionIndex(-1);
+              }}
+              onBlur={() => {
+                setAddressBarFocused(false);
+                setActiveSuggestionIndex(-1);
+              }}
+              onMouseDown={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                if (handleAddressClipboardShortcut(event)) return;
+                if (event.key === 'ArrowDown' && addressSuggestions.length > 0) {
+                  event.preventDefault();
+                  setActiveSuggestionIndex((index) => (index + 1) % addressSuggestions.length);
+                  return;
+                }
+                if (event.key === 'ArrowUp' && addressSuggestions.length > 0) {
+                  event.preventDefault();
+                  setActiveSuggestionIndex((index) =>
+                    index <= 0 ? addressSuggestions.length - 1 : index - 1
+                  );
+                  return;
+                }
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  const suggestion = addressSuggestions[activeSuggestionIndex];
+                  goUrl(suggestion?.url);
+                  return;
+                }
+                if (event.key === 'Escape') {
+                  event.preventDefault();
+                  setUrl(currentUrl);
+                  event.currentTarget.blur();
+                }
+              }}
+              aria-label="地址栏"
+              placeholder="输入网址或搜索词"
+              spellCheck={false}
+            />
+          ) : (
+            <button
+              type="button"
+              className="titlebar-address-preview"
+              title="编辑地址 (⌘L)"
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={focusAddressBar}
+            >
+              {currentUrl}
+            </button>
+          )}
           {addressSuggestions.length > 0 && (
             <div className="address-suggestions" role="listbox" aria-label="历史记录">
               {addressSuggestions.map((entry, index) => (
