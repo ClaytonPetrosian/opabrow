@@ -190,7 +190,77 @@ body {
   color: rgba(255, 220, 150, 1);
 }
 
-/* 注意:top traffic bar 和 webview container 现在都使用 inline style
-   兜底(因为 Vite HMR + 某些时序下 CSS 不可靠)。
-   这里不再需要 .traffic-bar / .webview-container 规则。 */
+/* ---------- 独立标题栏 ---------- */
+.titlebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 32px;
+  z-index: 9997;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  background: rgba(245, 245, 247, 0.92);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  opacity: 0;
+  pointer-events: auto;
+  -webkit-app-region: drag;
+  transition: opacity 180ms ease;
+}
 
+.titlebar.visible {
+  opacity: 1;
+}
+
+.traffic-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  -webkit-app-region: drag;
+}
+
+.traffic-button {
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 0.5px solid rgba(0, 0, 0, 0.15);
+  border-radius: 50%;
+  cursor: pointer;
+  outline: none;
+  -webkit-app-region: no-drag;
+}
+
+.traffic-button.close {
+  background: #ff5f57;
+}
+
+.traffic-button.minimize {
+  background: #febc2e;
+}
+
+.traffic-button:hover {
+  filter: brightness(0.94);
+}
+
+/* ---------- webview 容器 ---------- */
+.webview-container {
+  position: absolute;
+  top: 32px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.webview {
+  /* webview 元素由 JS 动态创建,尺寸跟随标题栏下方的容器。 */
+  flex: 1 1 auto;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}

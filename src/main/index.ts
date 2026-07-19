@@ -4,29 +4,23 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 
 // ---------- 窗口引用 ----------
 let mainWindow: BrowserWindow | null = null;
+const TITLEBAR_HEIGHT = 32;
 
 // ---------- 全局拦截所有 webContents 的新窗口请求 ----------
 // 关键:webview 标签内的 <a target="_blank"> 链接会创建新的 BrowserWindow
 // setWindowOpenHandler 只对 BrowserWindow 主 webContents 生效,
 // 但通过 app.on('web-contents-created') 可以拦截所有 webContents(包括 webview guest)
 app.on('web-contents-created', (_event, contents) => {
-  // 用 try/catch 保护:某些 macOS 上 webview guest 初始化时设 setWindowOpenHandler 会抛
-  // (虽然有 -3 errorno log 但不影响渲染)
-  try {
-    contents.setWindowOpenHandler((details) => {
-      console.log('[opabrow] setWindowOpenHandler intercepted:', details.url, 'in wc', contents.id, 'type=', contents.getType());
-      // 在当前 webContents 内直接 navigate —— 这样 history 累积,前进后退能用
-      contents.loadURL(details.url);
-      return { action: 'deny' };
-    });
-  } catch (e: any) {
-    console.warn('[opabrow] setWindowOpenHandler failed for wc', contents.id, 'type=', contents.getType(), ':', e?.message);
-  }
-  try {
-    contents.on('will-navigate', (_event, url, isInPlace, isMainFrame) => {
-      console.log('[opabrow] will-navigate:', url, 'isInPlace=', isInPlace, 'isMainFrame=', isMainFrame, 'wc=', contents.id);
-    });
-  } catch (e: any) {}
+  contents.setWindowOpenHandler((details) => {
+    console.log('[opabrow] setWindowOpenHandler intercepted:', details.url, 'in wc', contents.id);
+    // 在当前 webContents 内直接 navigate —— 这样 history 累积,前进后退能用
+    // 不能用 send IPC 通知 renderer 改 webview.src,那样会重置 history
+    contents.loadURL(details.url);
+    return { action: 'deny' };
+  });
+  contents.on('will-navigate', (_event, url, isInPlace, isMainFrame) => {
+    console.log('[opabrow] will-navigate:', url, 'isInPlace=', isInPlace, 'isMainFrame=', isMainFrame, 'wc=', contents.id);
+  });
 });
 
 // macOS 现代 Chrome UA(避免 B 站"浏览器版本过低")
@@ -35,40 +29,20 @@ const CHROME_UA =
 
 // ---------- 创建主窗口 ----------
 function createMainWindow(): BrowserWindow {
-  // 先确定 primary display 坐标,别让窗口跑到外接屏去
-  const { screen } = require('electron');
-  const primary = screen.getPrimaryDisplay();
-  const db = primary.bounds;
-  const w = Math.min(1000, db.width - 100);
-  const h = Math.min(700, db.height - 100);
-  const x = db.x + Math.floor((db.width - w) / 2);
-  const y = db.y + Math.floor((db.height - h) / 2) + 20;
-  console.log('[opabrow] primary display bounds:', JSON.stringify(db), '→ window', w, 'x', h, 'at', x, ',', y);
-
   const win = new BrowserWindow({
-    x, y, width: w, height: h,
-    minWidth: 240,
-    minHeight: 180,
-    show: true,
-    // 真正的 iPhone Mirroring 风格浮窗:
-    // - frame: true + titleBarStyle: 'hidden'  (macOS):
-    //     * macOS 完全不画 title bar + traffic lights
-    //     * contentView 从 0 开始
-    //     * resizable: true 仍然有效,macOS 自动处理边框 resize
-    // - 顶部的 traffic lights 完全由 React 自己画:
-    //     * 平时 opacity: 0 (视觉上完全不可见,看上去就是 chrome-less 矩形窗口)
-    //     * 鼠标 hover 窗口顶部 28px 时 opacity: 1,显示红黄绿三个按钮
-    // macOS 15 + Electron 43 的 'customButtonsOnHover' 在我们环境实测是 traffic lights
-    // 一直显示(hover 行为失效),所以改成自己控制
-    frame: true,
-    titleBarStyle: 'hidden',
-    backgroundColor: '#ffffff',
+    width: 1200,
+    height: 832,
+    show: true, // 立刻显示,免得 macOS 透明窗口被吞
+    transparent: true,
+    frame: false,
+    titleBarStyle: 'hiddenInset', // macOS 隐藏标题栏
+    trafficLightPosition: { x: -100, y: -100 }, // 把红绿黄按钮挪出可见区
     hasShadow: false,
-    movable: true,
+    backgroundColor: '#00000000', // 完全透明
+    movable: true, // 允许拖动
     resizable: true,
+    center: true,
     title: 'opabrow',
-    visibleOnAllWorkspaces: true,
-    fullscreenable: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false, // iframe 用 allow-same-origin,需要这一关
@@ -82,11 +56,6 @@ function createMainWindow(): BrowserWindow {
 
   // 自定义 UA
   win.webContents.setUserAgent(CHROME_UA);
-
-  // 调试:把 renderer 的 console.log 转发到主进程 stdout
-  win.webContents.on('console-message', (_e, level, message, line, source) => {
-    console.log(`[renderer:${level}] ${message} (${source}:${line})`);
-  });
 
   // 加载 dev / prod URL
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
@@ -122,43 +91,37 @@ function createMainWindow(): BrowserWindow {
     win.setFullScreen(false);
   });
 
-  // ready-to-show:窗口准备好显示时
-  win.once('ready-to-show', () => {
-    // 显式设 alwaysOnTop,让窗口浮在普通窗口之上
-    win.setAlwaysOnTop(true, 'pop-up-menu');
-
-    // 强制隐藏 macOS 自己的 traffic lights —— macOS 15 + Electron 43 下
-    // titleBarStyle: 'hidden' 仍然让 macOS 画 traffic lights (dimmed 状态)。
-    // 三重保险:
-    // 1. setWindowButtonVisibility(false) — 官方 API
-    // 2. setWindowButtonPosition({x:-100, y:-100}) — 移到屏幕外
-    // 3. 在多个生命周期事件 (show/focus/restore/move) 都调用一次
-    //    (macOS 15 + Electron 43 的已知 bug,有时只在某个时机调用才生效)
-    const hideMacButtons = (): void => {
-      if (process.platform !== 'darwin') return;
-      try {
-        const w = win as unknown as {
-          setWindowButtonVisibility?: (v: boolean) => void;
-          setWindowButtonPosition?: (pos: { x: number; y: number }) => void;
-        };
-        w.setWindowButtonVisibility?.(false);
-        w.setWindowButtonPosition?.({ x: -100, y: -100 });
-      } catch (e) {
-        // ignore
-      }
-    };
-    hideMacButtons();
-    win.on('show', hideMacButtons);
-    win.on('focus', hideMacButtons);
-    win.on('restore', hideMacButtons);
-    win.on('move', hideMacButtons);
-
-    win.show();
-    win.focus();
-    win.moveTop();
-  });
+  installTitlebarHoverTracking(win);
 
   return win;
+}
+
+// 标题栏区域独立占据窗口顶部 32px,通过屏幕坐标检测 hover,不依赖 webview 的鼠标事件。
+function installTitlebarHoverTracking(win: BrowserWindow): void {
+  let lastVisible: boolean | null = null;
+
+  const update = (): void => {
+    if (win.isDestroyed()) return;
+
+    const bounds = win.getBounds();
+    const cursor = screen.getCursorScreenPoint();
+    const visible =
+      cursor.x >= bounds.x &&
+      cursor.x < bounds.x + bounds.width &&
+      cursor.y >= bounds.y &&
+      cursor.y < bounds.y + TITLEBAR_HEIGHT;
+
+    if (visible === lastVisible) return;
+    lastVisible = visible;
+    win.webContents.send('titlebar-visibility', visible);
+  };
+
+  const timer = setInterval(update, 50);
+  win.webContents.on('did-finish-load', () => {
+    lastVisible = null;
+    update();
+  });
+  win.once('closed', () => clearInterval(timer));
 }
 
 // ---------- macOS 顶部菜单栏 ----------
@@ -288,16 +251,6 @@ function registerIpc(win: BrowserWindow): void {
     win.minimize();
   });
 
-  // 最大化切换(自绘 traffic lights 的 zoom 按钮用)
-  ipcMain.handle('zoom-window', () => {
-    if (win.isMaximized()) {
-      win.unmaximize();
-    } else {
-      win.maximize();
-    }
-    return win.isMaximized();
-  });
-
   // 强制激活(透明窗口有时需要)
   ipcMain.handle('focus-window', () => {
     if (win.isMinimized()) win.restore();
@@ -306,24 +259,6 @@ function registerIpc(win: BrowserWindow): void {
   });
 
   // 手动开始拖动窗口 —— CSS -webkit-app-region: drag 在透明窗口上有时不灵,这里手动调
-  // 主动获取当前鼠标位置(renderer 在 webview 之上收不到 mousemove,
-  // 需要从主进程轮询)
-  ipcMain.handle('get-cursor-pos', () => {
-    try {
-      const cursor = screen.getCursorScreenPoint();
-      const bounds = win.getBounds();
-      return {
-        x: cursor.x - bounds.x,
-        y: cursor.y - bounds.y,
-        screenX: cursor.x,
-        screenY: cursor.y,
-        bounds: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }
-      };
-    } catch (e) {
-      return null;
-    }
-  });
-
   ipcMain.handle('start-drag', () => {
     try {
       (win as BrowserWindow & { startDragging?: () => void }).startDragging?.();
@@ -336,15 +271,6 @@ function registerIpc(win: BrowserWindow): void {
 // ---------- App 生命周期 ----------
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.opabrow.app');
-
-  // 开启 chrome devtools 远程调试端口,方便诊断
-  if (is.dev || process.env['OPABROW_DEVTOOLS']) {
-    try {
-      app.commandLine.appendSwitch('remote-debugging-port', '9333');
-    } catch (e) {
-      // ignore
-    }
-  }
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window);

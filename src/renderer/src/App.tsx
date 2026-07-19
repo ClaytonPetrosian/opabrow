@@ -8,19 +8,30 @@ function App() {
   const [showQuickBar, setShowQuickBar] = useState(false);
   const [opacity, setOpacity] = useState(1.0);
   const [onTop, setOnTop] = useState(false);
-  const [trafficBarVisible, setTrafficBarVisible] = useState(false);
+  const [titlebarVisible, setTitlebarVisible] = useState(false);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
+  const webviewReadyRef = useRef(false);
   const webviewContainerRef = useRef<HTMLDivElement>(null);
   const quickInputRef = useRef<HTMLInputElement>(null);
 
   const loadInWebview = (targetUrl: string) => {
     const wv = webviewRef.current;
     if (!wv) return;
-    if (typeof wv.loadURL === 'function') {
-      void wv.loadURL(targetUrl);
+
+    // dom-ready 之前调用 loadURL 会直接抛错;初始导航交给 src 属性。
+    if (!webviewReadyRef.current) {
+      wv.src = targetUrl;
       return;
     }
-    wv.src = targetUrl;
+
+    try {
+      if (wv.getURL() === targetUrl) return;
+      void wv.loadURL(targetUrl).catch((error) => {
+        console.warn('webview navigation failed:', error);
+      });
+    } catch (error) {
+      console.warn('webview navigation failed:', error);
+    }
   };
 
   // 透明度变化 → main process
@@ -33,162 +44,89 @@ function App() {
     window.opabrow.setAlwaysOnTop(onTop);
   }, [onTop]);
 
-  // 顶部 traffic bar 显隐 —— 主动轮询鼠标位置,直接改 DOM style.opacity
-  // 原因 1:webview (hosted plugin) 拦截所有 mouse 事件,renderer 端用
-  //   document/window/traffic-bar 上的 mouseenter/mousemove/mouseover 都收不到。
-  //   唯一可靠的方案:用 IPC 问主进程要光标位置 (screen.getCursorScreenPoint)。
-  // 原因 2:React 19 + Vite HMR 在某些时序下 setState 不可靠
-  //   (看到 render: trafficBarVisible=true 之后 setTrafficBarVisible(false) 没触发 re-render)
-  //   直接改 DOM style.opacity 最稳。
-  useEffect(() => {
-    let hideTimer: number | null = null;
-    let stopped = false;
-    let currentVisible = false;
-
-    if (typeof window.opabrow?.getCursorPos !== 'function') {
-      return;
-    }
-
-    const setBarVisible = (visible: boolean): void => {
-      if (visible === currentVisible) return;
-      currentVisible = visible;
-      // 直接改 DOM,绕过 React 渲染 (React 19 + Vite HMR 在某些时序下
-      // setState 后不触发 re-render,直接改 DOM.style.opacity 最稳)
-      const bar = document.querySelector('.traffic-bar') as HTMLElement | null;
-      if (bar) {
-        bar.style.opacity = visible ? '1' : '0';
-      }
-      // 同步 React state(虽然 DOM 已改,但下次 React re-render 会按 state 重置,
-      // 所以两个都改)
-      setTrafficBarVisible(visible);
-    };
-
-    // 关键:只在 timer 未设置时设置,避免每次 poll 都重置 timer
-    // (否则 80ms 间隔 poll 会无限重置 300ms timer,永远不 fire)
-    const scheduleHide = (): void => {
-      if (hideTimer !== null) return;
-      hideTimer = window.setTimeout(() => {
-        setBarVisible(false);
-        hideTimer = null;
-      }, 300);
-    };
-
-    const show = (): void => {
-      if (hideTimer !== null) {
-        clearTimeout(hideTimer);
-        hideTimer = null;
-      }
-      setBarVisible(true);
-    };
-
-    // 轮询:每 80ms 问主进程要光标位置
-    const interval = window.setInterval(async () => {
-      if (stopped) return;
-      try {
-        const pos = await window.opabrow.getCursorPos();
-        if (!pos) return;
-        const inX = pos.x >= 0 && pos.x < pos.bounds.width;
-        const inY = pos.y >= 0 && pos.y < pos.bounds.height;
-        if (inX && inY) {
-          if (pos.y < 28) {
-            show();
-          } else {
-            scheduleHide();
-          }
-        } else {
-          if (hideTimer !== null) {
-            clearTimeout(hideTimer);
-            hideTimer = null;
-          }
-          setBarVisible(false);
-        }
-      } catch (e) {
-        // 忽略
-      }
-    }, 80);
-
-    return () => {
-      stopped = true;
-      clearInterval(interval);
-      if (hideTimer !== null) {
-        clearTimeout(hideTimer);
-        hideTimer = null;
-      }
-    };
-  }, []);
-
-  // 移除 React useEffect 改用 CSS :hover 触发 (见 App.css .traffic-bar:hover)
-  // 原因:bar 平时 pointer-events: auto + opacity: 0,鼠标进入 bar 区域时
-  // CSS :hover 自然触发,比 useEffect 监听 mouseenter 更轻量可靠
-
   // 挂载 webview (动态创建,绕过 React 编译对 <webview> tag 的处理)
   useEffect(() => {
     const container = webviewContainerRef.current;
     if (!container) return;
 
-    // 延迟到下一个 microtask,确保 React 已 commit DOM
-    queueMicrotask(() => {
-      if (!container) return;
-      // 只清掉 webview 元素(不影响 React 渲染的 traffic-bar 等其他子节点)
-      // 之前用 while (firstChild) 会把 traffic-bar 也删掉,这是 bug
-      const existingWebviews = container.querySelectorAll('webview');
-      existingWebviews.forEach((w) => w.remove());
+    const wv = document.createElement('webview') as Electron.WebviewTag;
+    wv.src = currentUrl;
+    wv.className = 'webview';
+    // webview 独占标题栏下方的网页区域,不进入顶部 32px 标题栏。
+    wv.style.cssText = 'border:0;display:flex;background:#fff;';
+    // 建议性阻止新窗口
+    wv.setAttribute('allowpopups', 'false');
 
-      const wv = document.createElement('webview') as Electron.WebviewTag;
-      wv.className = 'webview';
-      wv.setAttribute('allowpopups', 'false');
-      // 简单:宽度高度 100%,webview-container 有 padding-top: 28px 让 webview 自然下移
-      wv.style.width = '100%';
-      wv.style.height = '100%';
-      wv.style.border = '0';
-      wv.style.background = '#fff';
-      wv.style.display = 'block';
-      // 在 createElement 之后就设 src,这样 attach 时 webview 已知道要加载什么
-      wv.setAttribute('src', currentUrl);
+    // webview guest 不会可靠地响应 CSS 的 100% 高度,未显式设尺寸时会回落到 150px。
+    // 用容器的实际像素尺寸同步给它,保证窗口缩放后网页视口同步更新。
+    const resizeWebview = () => {
+      const { width, height } = container.getBoundingClientRect();
+      const pixelWidth = Math.floor(width);
+      const pixelHeight = Math.floor(height);
+      if (pixelWidth < 1 || pixelHeight < 1) return;
+      wv.style.width = `${pixelWidth}px`;
+      wv.style.height = `${pixelHeight}px`;
+      wv.setAttribute('width', String(pixelWidth));
+      wv.setAttribute('height', String(pixelHeight));
+    };
+    const resizeObserver = new ResizeObserver(resizeWebview);
 
-      const syncUrl = (e: Event) => {
-        const next = (e as unknown as { url?: string }).url;
-        if (!next) return;
-        setCurrentUrl(next);
-        setUrl(next);
-      };
-      wv.addEventListener('did-navigate', syncUrl);
-      wv.addEventListener('did-navigate-in-page', syncUrl);
-      // 兜底:new-window 事件(部分 Electron 版本仍派发)
-      // 主拦截在 main 进程的 app.on('web-contents-created') 全局钩子
-      wv.addEventListener('new-window', (e) => {
-        e.preventDefault();
-        const target = (e as unknown as { url?: string }).url;
-        if (target) {
-          void wv.loadURL(target);
-          setCurrentUrl(target);
-          setUrl(target);
+    // target=_blank 拦截在 main 进程的 app.on('web-contents-created') 里完成。
+    // renderer 只负责把实际导航结果同步回 quick bar。
+    const onDomReady = () => {
+      webviewReadyRef.current = true;
+    };
+    wv.addEventListener('dom-ready', onDomReady);
+
+    const syncUrl = (e: Event) => {
+      const next = (e as unknown as { url?: string }).url;
+      if (!next) return;
+      setCurrentUrl(next);
+      setUrl(next);
+    };
+    wv.addEventListener('did-navigate', syncUrl);
+    wv.addEventListener('did-navigate-in-page', syncUrl);
+
+    // 兜底:new-window 事件也拦一次
+    wv.addEventListener('new-window', (e) => {
+      e.preventDefault();
+      const target = (e as unknown as { url?: string }).url;
+      if (target) {
+        try {
+          void wv.loadURL(target).catch((error) => {
+            console.warn('webview new-window navigation failed:', error);
+          });
+        } catch (error) {
+          console.warn('webview new-window navigation failed:', error);
         }
-      });
-
-      // attach 到 DOM
-      container.appendChild(wv);
-      webviewRef.current = wv;
+        setCurrentUrl(target);
+        setUrl(target);
+      }
     });
 
+    // webview guest 在 appendChild 时读取初始尺寸;必须在挂载前就写入，
+    // 否则会永久沿用 Chromium 的默认 150px 高度。
+    requestAnimationFrame(resizeWebview);
+    resizeWebview();
+    container.appendChild(wv);
+    webviewRef.current = wv;
+    resizeObserver.observe(container);
+
     return () => {
-      const wv = webviewRef.current;
-      if (wv) {
-        wv.remove();
-        webviewRef.current = null;
-      }
+      resizeObserver.disconnect();
+      wv.removeEventListener('dom-ready', onDomReady);
+      wv.remove();
+      webviewRef.current = null;
+      webviewReadyRef.current = false;
     };
+    // 只挂载一次
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // URL 变化时 → 改 webview.src
   useEffect(() => {
-    const wv = webviewRef.current;
-    if (!wv) return;
-    try {
-      void wv.loadURL(currentUrl);
-    } catch (e) {
-      // webview 还没 ready 会 throw,忽略
+    if (webviewRef.current) {
+      loadInWebview(currentUrl);
     }
   }, [currentUrl]);
 
@@ -236,7 +174,7 @@ function App() {
       off();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUrl]);
+  }, []);
 
   // ESC 关闭 quick bar
   useEffect(() => {
@@ -258,6 +196,32 @@ function App() {
     return off;
   }, []);
 
+  // 标题栏由 main process 通过屏幕坐标判断 hover,renderer 只负责动画和按钮状态。
+  useEffect(() => {
+    let hideTimer: number | null = null;
+    const off = window.opabrow.onTitlebarVisibility((visible) => {
+      if (hideTimer !== null) {
+        window.clearTimeout(hideTimer);
+        hideTimer = null;
+      }
+
+      if (visible) {
+        setTitlebarVisible(true);
+        return;
+      }
+
+      hideTimer = window.setTimeout(() => {
+        setTitlebarVisible(false);
+        hideTimer = null;
+      }, 280);
+    });
+
+    return () => {
+      off();
+      if (hideTimer !== null) window.clearTimeout(hideTimer);
+    };
+  }, []);
+
   // 备份:⌘L / ⌘+[ / ⌘+] 在 renderer 内也能响应
   // webview 焦点时键盘事件全进 webview,renderer 收不到 keydown,所以主路径走菜单 accelerator
   // 但这里保留 keydown 监听作为兜底(比如 webview 未 focus 时的菜单栏使用)
@@ -265,10 +229,12 @@ function App() {
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
+      const active = document.activeElement;
+      const editing = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+      if (editing) return;
+
       // ⌘+[ 后退
       if (e.key === '[' && !e.shiftKey && !e.altKey) {
-        const active = document.activeElement;
-        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
         e.preventDefault();
         try {
           webviewRef.current?.goBack();
@@ -279,8 +245,6 @@ function App() {
       }
       // ⌘+] 前进
       if (e.key === ']' && !e.shiftKey && !e.altKey) {
-        const active = document.activeElement;
-        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
         e.preventDefault();
         try {
           webviewRef.current?.goForward();
@@ -289,10 +253,37 @@ function App() {
         }
         return;
       }
+      // ⌘R 刷新
+      if (e.key.toLowerCase() === 'r' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        reload();
+        return;
+      }
+      // ⌘T 置顶
+      if (e.key.toLowerCase() === 't' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        setOnTop((v) => !v);
+        return;
+      }
+      // ⌘= / ⌘- 透明度
+      if ((e.key === '=' || e.key === '+') && !e.altKey) {
+        e.preventDefault();
+        setOpacity((o) => Math.min(1, Math.round((o + 0.1) * 100) / 100));
+        return;
+      }
+      if (e.key === '-' && !e.altKey) {
+        e.preventDefault();
+        setOpacity((o) => Math.max(0.1, Math.round((o - 0.1) * 100) / 100));
+        return;
+      }
+      // ⌘⇧H 回到主页
+      if (e.key.toLowerCase() === 'h' && e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        void goUrl(HOME_URL);
+        return;
+      }
       // ⌘L
       if (e.key === 'l' && !e.shiftKey) {
-        const active = document.activeElement;
-        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
         e.preventDefault();
         setShowQuickBar(true);
         setTimeout(() => quickInputRef.current?.focus(), 50);
@@ -327,141 +318,7 @@ function App() {
   }
 
   return (
-    <div
-      className="app"
-      style={{
-        // 兜底 inline style,确保 .app 容器占满整个 window content area
-        position: 'relative',
-        width: '100%',
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'transparent',
-        overflow: 'hidden'
-      } as React.CSSProperties}
-    >
-      {/* webview 容器 —— webview 元素由 useEffect 动态创建
-          顶部 0 偏移,但用 padding-top: 28px 给 traffic-bar 让出空间 */}
-      <div
-        className="webview-container"
-        ref={webviewContainerRef}
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-          background: '#fff',
-          zIndex: 0,
-          paddingTop: 28 // 给 traffic-bar 让出顶部 28px
-        } as React.CSSProperties}
-      >
-      </div>
-
-      {/* 顶部 iPhone Mirroring 风格 traffic bar —— 移到 webview-container 之外,
-          作为 fixed 定位的浮层。这样:
-          1. z-index 在 webview-container 之上,不会被打到 webview 后面
-          2. 鼠标事件不会被 webview (hosted plugin) 拦截
-          3. macOS titleBarStyle: 'hidden' 下,contentView 从 0 开始,
-             traffic-bar 的 top: 0 正好对应窗口最顶部 */}
-      {/* 顶部 iPhone Mirroring 风格 traffic bar —— 作为 fixed 定位的浮层
-          平时完全 chrome-less(只 macOS 的 traffic light 已被主进程隐藏到 -100,-100),
-          鼠标 hover 窗口顶部 28px 时,React state 驱动 opacity 0→1,显示红黄绿三按钮
-          鼠标离开时,300ms 延迟后自动隐藏
-
-          关键设计:
-          - z-index: 99999,确保在 webview 之上
-          - 80px left padding,让红黄绿按钮避开可能的 macOS 区域
-          - background: #f5f5f7 (macOS 标准 chrome 灰)
-          - WebkitAppRegion: 'drag' 让整个 bar 可拖动窗口 */}
-      {/* 顶部 iPhone Mirroring 风格 traffic bar —— 作为 fixed 定位的浮层
-          平时完全 chrome-less(只 macOS 的 traffic light 已被主进程隐藏到 -100,-100),
-          鼠标 hover 窗口顶部 28px 时,显隐逻辑(在 useEffect 里)会直接改
-          .traffic-bar 元素的 style.opacity,显示红黄绿三按钮
-          鼠标离开时,300ms 延迟后自动隐藏
-
-          关键设计:
-          - z-index: 99999,确保在 webview 之上
-          - 80px left padding,让红黄绿按钮避开可能的 macOS 区域
-          - background: #f5f5f7 (macOS 标准 chrome 灰)
-          - WebkitAppRegion: 'drag' 让整个 bar 可拖动窗口 */}
-      <div
-        className="traffic-bar"
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 28,
-          zIndex: 99999,
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 10px 0 80px', // 左 80px 留出 macOS traffic lights 的位置
-          gap: '8px',
-          background: '#f5f5f7',
-          borderBottom: '1px solid rgba(0, 0, 0, 0.08)',
-          opacity: trafficBarVisible ? 1 : 0,
-          pointerEvents: 'auto',
-          transition: 'opacity 0.18s ease',
-          WebkitAppRegion: 'drag'
-        } as React.CSSProperties}
-      >
-        <button
-          className="tl tl-close"
-          style={{
-            width: 12,
-            height: 12,
-            borderRadius: '50%',
-            border: '0.5px solid rgba(0,0,0,0.15)',
-            padding: 0,
-            cursor: 'pointer',
-            background: '#ff5f57',
-            outline: 'none',
-            WebkitAppRegion: 'no-drag'
-          } as React.CSSProperties}
-          onClick={() => window.opabrow.closeWindow()}
-          title="关闭窗口 (⌘W)"
-          aria-label="关闭"
-        />
-        <button
-          className="tl tl-min"
-          style={{
-            width: 12,
-            height: 12,
-            borderRadius: '50%',
-            border: '0.5px solid rgba(0,0,0,0.15)',
-            padding: 0,
-            cursor: 'pointer',
-            background: '#febc2e',
-            outline: 'none',
-            WebkitAppRegion: 'no-drag'
-          } as React.CSSProperties}
-          onClick={() => window.opabrow.minimizeWindow()}
-          title="最小化 (⌘M)"
-          aria-label="最小化"
-        />
-        <button
-          className="tl tl-zoom"
-          style={{
-            width: 12,
-            height: 12,
-            borderRadius: '50%',
-            border: '0.5px solid rgba(0,0,0,0.15)',
-            padding: 0,
-            cursor: 'pointer',
-            background: '#28c840',
-            outline: 'none',
-            WebkitAppRegion: 'no-drag'
-          } as React.CSSProperties}
-          onClick={() => window.opabrow.zoomWindow()}
-          title="最大化"
-          aria-label="最大化"
-        />
-      </div>
-
+    <div className="app">
       {showQuickBar && (
         <div className="quick-bar">
           <div className="quick-row">
@@ -509,27 +366,37 @@ function App() {
         </div>
       )}
 
-      {/* webview 容器 —— webview 元素由 useEffect 动态创建 */}
-      {/* 顶部 0 偏移,因为 macOS titleBarStyle: 'customButtonsOnHover' 已经在窗口顶部
-          提供了 hover 拖动区,不需要自己的 drag bar */}
+      {/* 顶部 32px 独立标题栏:始终占位,默认透明,不覆盖网页区域。 */}
       <div
-        className="webview-container"
-        ref={webviewContainerRef}
-        style={{
-          // 兜底 inline style,确保即使 CSS 没加载完也能 flex column 布局
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-          background: '#fff',
-          zIndex: 0
-        } as React.CSSProperties}
+        className={`titlebar ${titlebarVisible ? 'visible' : ''}`}
+        title="拖动窗口"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          window.opabrow.startDrag();
+        }}
       >
+        <div className="traffic-buttons">
+          <button
+            type="button"
+            className="traffic-button close"
+            aria-label="关闭窗口"
+            title="关闭窗口 (⌘W)"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={() => window.opabrow.closeWindow()}
+          />
+          <button
+            type="button"
+            className="traffic-button minimize"
+            aria-label="最小化窗口"
+            title="最小化窗口 (⌘M)"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={() => window.opabrow.minimizeWindow()}
+          />
+        </div>
       </div>
+
+      {/* webview 容器:从标题栏下方开始,网页大小不受标题栏显隐影响。 */}
+      <div className="webview-container" ref={webviewContainerRef} />
     </div>
   );
 }

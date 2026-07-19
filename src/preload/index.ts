@@ -18,11 +18,8 @@ const api = {
   setAlwaysOnTop: (onTop: boolean) => ipcRenderer.invoke('set-always-on-top', onTop),
   closeWindow: () => ipcRenderer.invoke('close-window'),
   minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
-  zoomWindow: () => ipcRenderer.invoke('zoom-window'),
   focusWindow: () => ipcRenderer.invoke('focus-window'),
   startDrag: () => ipcRenderer.invoke('start-drag'),
-  getCursorPos: (): Promise<{ x: number; y: number; screenX: number; screenY: number; bounds: { x: number; y: number; width: number; height: number } } | null> =>
-    ipcRenderer.invoke('get-cursor-pos'),
 
   // 菜单事件订阅
   onMenuAction: (callback: (action: MenuAction) => void) => {
@@ -40,6 +37,15 @@ const api = {
     ipcRenderer.on('navigate-iframe', handler);
     return (): void => {
       ipcRenderer.removeListener('navigate-iframe', handler);
+    };
+  },
+
+  // 标题栏 hover 状态(由 main process 根据屏幕坐标判断)
+  onTitlebarVisibility: (callback: (visible: boolean) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, visible: boolean) => callback(visible);
+    ipcRenderer.on('titlebar-visibility', handler);
+    return (): void => {
+      ipcRenderer.removeListener('titlebar-visibility', handler);
     };
   }
 };
