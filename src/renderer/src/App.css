@@ -26,7 +26,11 @@ body {
   position: relative;
   display: flex;
   flex-direction: column;
-  background: transparent;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 18px;
+  background: rgba(238, 242, 247, 0.5);
+  box-shadow: 0 16px 42px rgba(19, 35, 52, 0.2);
 }
 
 /* ---------- 顶部 quick bar (命令面板) —— 自适应窗口宽度 ---------- */
@@ -235,13 +239,15 @@ body {
   z-index: 9997;
   display: flex;
   align-items: center;
-  padding: 0 10px;
-  background: rgba(245, 245, 247, 0.92);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 0 12px;
+  background: rgba(246, 248, 251, 0.88);
+  border-bottom: 1px solid rgba(86, 101, 119, 0.14);
   opacity: 0;
   pointer-events: auto;
   -webkit-app-region: drag;
-  transition: opacity 180ms ease;
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  transition: opacity 180ms ease, background 180ms ease;
 }
 
 .titlebar.visible {
@@ -251,16 +257,18 @@ body {
 .traffic-buttons {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   -webkit-app-region: drag;
 }
 
 .traffic-button {
-  width: 12px;
-  height: 12px;
+  display: grid;
+  width: 14px;
+  height: 14px;
   padding: 0;
   border: 0.5px solid rgba(0, 0, 0, 0.15);
   border-radius: 50%;
+  place-items: center;
   cursor: pointer;
   outline: none;
   -webkit-app-region: no-drag;
@@ -274,31 +282,81 @@ body {
   background: #febc2e;
 }
 
+.traffic-icon {
+  color: rgba(74, 31, 26, 0.82);
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.traffic-button.minimize .traffic-icon {
+  color: rgba(91, 61, 10, 0.82);
+}
+
+.titlebar.visible .traffic-icon,
+.traffic-button:focus-visible .traffic-icon,
+.traffic-button:hover .traffic-icon {
+  opacity: 1;
+}
+
 .traffic-button:hover {
-  filter: brightness(0.94);
+  filter: brightness(0.96) saturate(1.1);
+}
+
+.traffic-button:focus-visible,
+.titlebar-icon-button:focus-visible {
+  outline: 2px solid rgba(0, 122, 255, 0.72);
+  outline-offset: 2px;
+}
+
+.titlebar-icon-button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  margin-left: 4px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  place-items: center;
+  background: transparent;
+  color: rgba(74, 88, 105, 0.72);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-icon-button:hover {
+  background: rgba(87, 102, 122, 0.1);
+  color: #405269;
+}
+
+.titlebar-icon-button.active {
+  border-color: rgba(0, 122, 255, 0.18);
+  background: rgba(0, 122, 255, 0.12);
+  color: #0a72d8;
 }
 
 .titlebar-address {
   position: relative;
-  flex: 0 1 360px;
-  min-width: 0;
-  margin-left: 24px;
+  flex: 1 1 360px;
+  width: min(500px, 100%);
+  max-width: 500px;
+  min-width: 160px;
+  margin-left: 18px;
   -webkit-app-region: no-drag;
 }
 
 .titlebar-address-input {
   display: block;
   width: 100%;
-  height: 24px;
-  padding: 0 9px;
-  border: 1px solid rgba(0, 0, 0, 0.14);
-  border-radius: 3px;
+  height: 25px;
+  padding: 0 10px;
+  border: 1px solid rgba(91, 105, 121, 0.2);
+  border-radius: 6px;
   outline: none;
-  background: rgba(255, 255, 255, 0.72);
-  color: #313136;
+  background: rgba(255, 255, 255, 0.78);
+  color: #354052;
   font-family: inherit;
   font-size: 12px;
-  line-height: 24px;
+  line-height: 25px;
   -webkit-app-region: no-drag;
 }
 
@@ -355,6 +413,56 @@ body {
   background: rgba(0, 122, 255, 0.1);
 }
 
+.titlebar-opacity {
+  display: flex;
+  flex: 1 1 180px;
+  align-items: center;
+  gap: 8px;
+  min-width: 112px;
+  max-width: 220px;
+  margin-left: 22px;
+  color: #5d6a7a;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-opacity-slider {
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  appearance: none;
+  border-radius: 999px;
+  cursor: pointer;
+  outline: none;
+}
+
+.titlebar-opacity-slider::-webkit-slider-thumb {
+  width: 13px;
+  height: 13px;
+  appearance: none;
+  border: 1px solid rgba(39, 57, 75, 0.18);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(30, 44, 60, 0.2);
+}
+
+.titlebar-opacity output {
+  width: 31px;
+  color: #657386;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+@media (max-width: 760px) {
+  .titlebar-address {
+    margin-left: 12px;
+  }
+
+  .titlebar-opacity {
+    display: none;
+  }
+}
+
 /* ---------- webview 容器 ---------- */
 .webview-container {
   position: absolute;
@@ -363,7 +471,7 @@ body {
   bottom: 0;
   left: 0;
   display: flex;
-  border-radius: 0;
+  border-radius: 0 0 17px 17px;
   overflow: hidden;
 }
 

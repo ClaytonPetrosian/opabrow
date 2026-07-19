@@ -32,12 +32,16 @@
 
     <circle cx="188" cy="112" r="8" fill="#FF5F57"/>
     <circle cx="216" cy="112" r="8" fill="#FEBC2E"/>
-    <rect x="293" y="96" width="538" height="32" rx="8" fill="#FFFFFF" fill-opacity=".87" stroke="#D5DCE5"/>
+    <rect x="246" y="100" width="24" height="24" rx="6" fill="#E4ECF6"/>
+    <path d="M258 106V117M254 110L262 114M258 117L255 120M258 117L261 120" stroke="#63778F" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="293" y="96" width="500" height="32" rx="8" fill="#FFFFFF" fill-opacity=".87" stroke="#D5DCE5"/>
     <circle cx="316" cy="112" r="7" stroke="#6F7F91" stroke-width="2"/>
     <path d="M321 117L326 122" stroke="#6F7F91" stroke-width="2" stroke-linecap="round"/>
     <text x="342" y="117" fill="#536273" font-family="Arial, sans-serif" font-size="14">faxianai.com</text>
-    <rect x="1150" y="101" width="92" height="22" rx="11" fill="#E4ECF6"/>
-    <text x="1167" y="116" fill="#63778F" font-family="Arial, sans-serif" font-size="12">ON TOP</text>
+    <rect x="830" y="110" width="190" height="4" rx="2" fill="#D5DFEA"/>
+    <rect x="830" y="110" width="142" height="4" rx="2" fill="#60A5FA"/>
+    <circle cx="972" cy="112" r="7" fill="#FFFFFF" stroke="#B8C5D4"/>
+    <text x="1034" y="116" fill="#63778F" font-family="Arial, sans-serif" font-size="12">75%</text>
 
     <rect x="190" y="169" width="1060" height="562" rx="16" fill="#F8FAFC"/>
     <rect x="190" y="169" width="1060" height="275" rx="16" fill="url(#page)"/>
