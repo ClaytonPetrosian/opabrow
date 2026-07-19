@@ -20,7 +20,7 @@
 <p align="center">上班摸鱼、随手查资料、盯住直播和看板，让想看的网页留在身边，而不是占满整个桌面。</p>
 
 <p align="center">
-  <img src="./docs/opabrow-preview.svg" width="100%" alt="opabrow 浮层浏览器预览" />
+  <img src="./docs/opabrow-demo.gif" width="800" alt="opabrow 浮层浏览器实际演示" />
 </p>
 
 ## 为什么是 opabrow

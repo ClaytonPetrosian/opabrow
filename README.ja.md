@@ -20,7 +20,7 @@
 <p align="center">仕事の合間のひと息にも、調べものにも。気になるページをそばに置き、デスクトップは占有しない。</p>
 
 <p align="center">
-  <img src="./docs/opabrow-preview.svg" width="100%" alt="opabrow フローティングブラウザのプレビュー" />
+  <img src="./docs/opabrow-demo.gif" width="800" alt="opabrow フローティングブラウザの実演" />
 </p>
 
 ## opabrow とは

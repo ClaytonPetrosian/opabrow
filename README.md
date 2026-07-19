@@ -22,7 +22,7 @@
 </p>
 
 <p align="center">
-  <img src="./docs/opabrow-preview.svg" width="100%" alt="opabrow floating browser preview" />
+  <img src="./docs/opabrow-demo.gif" width="800" alt="opabrow floating browser in action" />
 </p>
 
 ## Why opabrow
