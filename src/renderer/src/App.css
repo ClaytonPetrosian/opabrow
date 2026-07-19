@@ -107,59 +107,94 @@ body {
   padding: 0;
 }
 
-.quick-label {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.55);
-  white-space: nowrap;
-  min-width: 32px;
-  flex-shrink: 0;
+
+/* ---------- 透明度对话框 ---------- */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.2);
+  -webkit-app-region: no-drag;
 }
 
-.quick-value {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.85);
-  font-variant-numeric: tabular-nums;
-  min-width: 32px;
-  text-align: right;
-  flex-shrink: 0;
+.opacity-dialog {
+  width: min(320px, 100%);
+  padding: 16px;
+  background: rgba(36, 36, 38, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.38);
 }
 
-.quick-slider {
+.dialog-heading,
+.opacity-control {
+  display: flex;
+  align-items: center;
+}
+
+.dialog-heading {
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.dialog-heading h2 {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dialog-close {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dialog-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.opacity-control {
+  gap: 14px;
+}
+
+.opacity-slider {
   flex: 1;
   min-width: 0;
   height: 4px;
-  -webkit-appearance: none;
   appearance: none;
-  background: rgba(255, 255, 255, 0.15);
   border-radius: 2px;
   outline: none;
   cursor: pointer;
+  background: rgba(255, 255, 255, 0.22);
 }
 
-.quick-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
+.opacity-slider::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
   appearance: none;
-  width: 14px;
-  height: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  cursor: pointer;
-}
-
-.quick-slider::-webkit-slider-thumb:hover {
   background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
-.quick-slider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  cursor: pointer;
+.opacity-control output {
+  width: 38px;
+  color: #fff;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .quick-toggle {
@@ -241,6 +276,83 @@ body {
 
 .traffic-button:hover {
   filter: brightness(0.94);
+}
+
+.titlebar-address {
+  position: relative;
+  flex: 0 1 360px;
+  min-width: 0;
+  margin-left: 24px;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-address-input {
+  display: block;
+  width: 100%;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 3px;
+  outline: none;
+  background: rgba(255, 255, 255, 0.72);
+  color: #313136;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 24px;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-address-input:focus {
+  border-color: rgba(0, 122, 255, 0.72);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.14);
+}
+
+.titlebar-address-input::placeholder {
+  color: rgba(49, 49, 54, 0.5);
+}
+
+.address-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 1;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.13);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+  -webkit-app-region: no-drag;
+}
+
+.address-suggestion {
+  display: block;
+  width: 100%;
+  height: 28px;
+  padding: 0 9px;
+  overflow: hidden;
+  border: 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: transparent;
+  color: #313136;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 28px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
+}
+
+.address-suggestion:last-child {
+  border-bottom: 0;
+}
+
+.address-suggestion:hover,
+.address-suggestion.active {
+  background: rgba(0, 122, 255, 0.1);
 }
 
 /* ---------- webview 容器 ---------- */

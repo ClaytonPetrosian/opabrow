@@ -8,6 +8,8 @@ export type MenuAction =
   | 'go_back'
   | 'go_forward'
   | 'ontop_toggle'
+  | 'mobile_mode_toggle'
+  | 'show_opacity_dialog'
   | 'opacity_inc'
   | 'opacity_dec'
   | 'show_quickbar';
@@ -22,8 +24,8 @@ const api = {
   startDrag: () => ipcRenderer.invoke('start-drag'),
 
   // 菜单事件订阅
-  onMenuAction: (callback: (action: MenuAction) => void) => {
-    const handler = (_e: Electron.IpcRendererEvent, action: MenuAction) => callback(action);
+  onMenuAction: (callback: (action: MenuAction, value?: boolean) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, action: MenuAction, value?: boolean) => callback(action, value);
     ipcRenderer.on('menu-action', handler);
     // 返回 unsubscribe(包成 void 兼容 React useEffect Destructor)
     return (): void => {

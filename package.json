@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "description": "opabrow - 透明浮层浏览器",
   "main": "./out/main/index.js",
-  "author": "tan",
-  "license": "MIT",
-  "private": true,
+  "author": "opabrow contributors",
+  "license": "MPL-2.0",
+  "private": false,
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",

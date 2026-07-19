@@ -147,7 +147,7 @@ function buildAppMenu(win: BrowserWindow): Menu {
     label: '浏览',
     submenu: [
       {
-        label: '前往 URL…',
+        label: '聚焦地址栏',
         accelerator: 'CmdOrCtrl+L',
         click: () => win.webContents.send('menu-action', 'go_url')
       },
@@ -188,6 +188,17 @@ function buildAppMenu(win: BrowserWindow): Menu {
       },
       { type: 'separator' },
       {
+        label: '手机模式访问网页',
+        type: 'checkbox',
+        checked: false,
+        click: (menuItem) => win.webContents.send('menu-action', 'mobile_mode_toggle', menuItem.checked)
+      },
+      { type: 'separator' },
+      {
+        label: '调整透明度…',
+        click: () => win.webContents.send('menu-action', 'show_opacity_dialog')
+      },
+      {
         label: '增加透明度',
         accelerator: 'CmdOrCtrl+=',
         click: () => win.webContents.send('menu-action', 'opacity_inc')
@@ -199,7 +210,7 @@ function buildAppMenu(win: BrowserWindow): Menu {
       },
       { type: 'separator' },
       {
-        label: '切换地址栏(临时)',
+        label: '打开命令面板',
         accelerator: 'CmdOrCtrl+K',
         click: () => win.webContents.send('menu-action', 'show_quickbar')
       }
@@ -270,7 +281,7 @@ function registerIpc(win: BrowserWindow): void {
 
 // ---------- App 生命周期 ----------
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.opabrow.app');
+  electronApp.setAppUserModelId('com.tan.opabrow');
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window);

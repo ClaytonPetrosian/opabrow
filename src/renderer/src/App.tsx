@@ -1,6 +1,46 @@
 import { useEffect, useRef, useState } from 'react';
 
-const HOME_URL = 'https://www.bilibili.com';
+const HOME_URL = 'https://www.faxianai.com/';
+const DESKTOP_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36 opabrow/0.1';
+const MOBILE_USER_AGENT =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+const HISTORY_STORAGE_KEY = 'opabrow.navigation-history';
+const HISTORY_LIMIT = 100;
+
+type HistoryEntry = {
+  url: string;
+  visitedAt: number;
+};
+
+function readHistory(): HistoryEntry[] {
+  try {
+    const stored = localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (!stored) return [];
+
+    const entries = JSON.parse(stored) as unknown;
+    if (!Array.isArray(entries)) return [];
+
+    return entries.filter(
+      (entry): entry is HistoryEntry =>
+        typeof entry === 'object' &&
+        entry !== null &&
+        typeof entry.url === 'string' &&
+        typeof entry.visitedAt === 'number'
+    );
+  } catch {
+    return [];
+  }
+}
+
+function formatHistoryUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.host}${parsed.pathname === '/' ? '' : parsed.pathname}${parsed.search}`;
+  } catch {
+    return url;
+  }
+}
 
 function App() {
   const [url, setUrl] = useState(HOME_URL);
@@ -8,11 +48,17 @@ function App() {
   const [showQuickBar, setShowQuickBar] = useState(false);
   const [opacity, setOpacity] = useState(1.0);
   const [onTop, setOnTop] = useState(false);
+  const [mobileMode, setMobileMode] = useState(false);
+  const [showOpacityDialog, setShowOpacityDialog] = useState(false);
   const [titlebarVisible, setTitlebarVisible] = useState(false);
+  const [addressBarFocused, setAddressBarFocused] = useState(false);
+  const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>(readHistory);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const webviewReadyRef = useRef(false);
   const webviewContainerRef = useRef<HTMLDivElement>(null);
   const quickInputRef = useRef<HTMLInputElement>(null);
+  const addressInputRef = useRef<HTMLInputElement>(null);
 
   const loadInWebview = (targetUrl: string) => {
     const wv = webviewRef.current;
@@ -44,12 +90,19 @@ function App() {
     window.opabrow.setAlwaysOnTop(onTop);
   }, [onTop]);
 
+  useEffect(() => {
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(historyEntries));
+  }, [historyEntries]);
+
   // 挂载 webview (动态创建,绕过 React 编译对 <webview> tag 的处理)
   useEffect(() => {
     const container = webviewContainerRef.current;
     if (!container) return;
 
     const wv = document.createElement('webview') as Electron.WebviewTag;
+    // webview 尚未就绪时调用 setUserAgent 会让初始导航停在 about:blank。
+    // 首次加载改用声明式属性；切换手机模式时再在 dom-ready 后调用方法。
+    wv.setAttribute('useragent', DESKTOP_USER_AGENT);
     wv.src = currentUrl;
     wv.className = 'webview';
     // webview 独占标题栏下方的网页区域,不进入顶部 32px 标题栏。
@@ -83,6 +136,7 @@ function App() {
       if (!next) return;
       setCurrentUrl(next);
       setUrl(next);
+      recordHistory(next);
     };
     wv.addEventListener('did-navigate', syncUrl);
     wv.addEventListener('did-navigate-in-page', syncUrl);
@@ -130,11 +184,26 @@ function App() {
     }
   }, [currentUrl]);
 
+  // 手机模式通过切换 webview 的浏览器标识实现，并重新载入当前页面让网站按移动端返回内容。
+  useEffect(() => {
+    const wv = webviewRef.current;
+    if (!wv) return;
+
+    try {
+      wv.setUserAgent(mobileMode ? MOBILE_USER_AGENT : DESKTOP_USER_AGENT);
+      if (webviewReadyRef.current) wv.reload();
+    } catch (error) {
+      console.warn('webview user agent update failed:', error);
+    }
+  }, [mobileMode]);
+
   // 菜单事件订阅
   useEffect(() => {
-    const off = window.opabrow.onMenuAction((action) => {
+    const off = window.opabrow.onMenuAction((action, value) => {
       switch (action) {
         case 'go_url':
+          focusAddressBar();
+          break;
         case 'show_quickbar':
           setShowQuickBar(true);
           setTimeout(() => quickInputRef.current?.focus(), 50);
@@ -162,6 +231,12 @@ function App() {
         case 'ontop_toggle':
           setOnTop((v) => !v);
           break;
+        case 'mobile_mode_toggle':
+          setMobileMode(value === true);
+          break;
+        case 'show_opacity_dialog':
+          setShowOpacityDialog(true);
+          break;
         case 'opacity_inc':
           setOpacity((o) => Math.min(1, Math.round((o + 0.1) * 100) / 100));
           break;
@@ -179,13 +254,14 @@ function App() {
   // ESC 关闭 quick bar
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showQuickBar) {
-        setShowQuickBar(false);
+      if (e.key === 'Escape') {
+        if (showOpacityDialog) setShowOpacityDialog(false);
+        else if (showQuickBar) setShowQuickBar(false);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [showQuickBar]);
+  }, [showOpacityDialog, showQuickBar]);
 
   // 监听 main 进程发来的 "iframe 跳转" 请求
   useEffect(() => {
@@ -285,8 +361,7 @@ function App() {
       // ⌘L
       if (e.key === 'l' && !e.shiftKey) {
         e.preventDefault();
-        setShowQuickBar(true);
-        setTimeout(() => quickInputRef.current?.focus(), 50);
+        focusAddressBar();
       }
     };
     window.addEventListener('keydown', handler);
@@ -307,6 +382,18 @@ function App() {
     setUrl(next);
     setCurrentUrl(next);
     setShowQuickBar(false);
+    setAddressBarFocused(false);
+    setActiveSuggestionIndex(-1);
+    addressInputRef.current?.blur();
+  }
+
+  function focusAddressBar() {
+    setAddressBarFocused(true);
+    setActiveSuggestionIndex(-1);
+    window.setTimeout(() => {
+      addressInputRef.current?.focus();
+      addressInputRef.current?.select();
+    }, 0);
   }
 
   function reload() {
@@ -316,6 +403,22 @@ function App() {
       console.warn('reload failed:', e);
     }
   }
+
+  function recordHistory(nextUrl: string) {
+    if (!/^https?:\/\//i.test(nextUrl)) return;
+
+    setHistoryEntries((entries) => [
+      { url: nextUrl, visitedAt: Date.now() },
+      ...entries.filter((entry) => entry.url !== nextUrl)
+    ].slice(0, HISTORY_LIMIT));
+  }
+
+  const addressQuery = url.trim().toLowerCase();
+  const addressSuggestions = addressBarFocused
+    ? historyEntries
+        .filter((entry) => !addressQuery || entry.url.toLowerCase().includes(addressQuery))
+        .slice(0, 8)
+    : [];
 
   return (
     <div className="app">
@@ -341,20 +444,6 @@ function App() {
           </div>
 
           <div className="quick-row">
-            <span className="quick-label">透明度</span>
-            <input
-              className="quick-slider"
-              type="range"
-              min={0.1}
-              max={1.0}
-              step={0.01}
-              value={opacity}
-              onChange={(e) => setOpacity(parseFloat(e.target.value))}
-            />
-            <span className="quick-value">{Math.round(opacity * 100)}%</span>
-          </div>
-
-          <div className="quick-row">
             <button
               className={`quick-toggle ${onTop ? 'on' : ''}`}
               onClick={() => setOnTop((v) => !v)}
@@ -366,9 +455,51 @@ function App() {
         </div>
       )}
 
+      {showOpacityDialog && (
+        <div
+          className="dialog-backdrop"
+          role="presentation"
+          onMouseDown={() => setShowOpacityDialog(false)}
+        >
+          <section
+            className="opacity-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="opacity-dialog-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="dialog-heading">
+              <h2 id="opacity-dialog-title">窗口透明度</h2>
+              <button
+                type="button"
+                className="dialog-close"
+                aria-label="关闭"
+                title="关闭 (ESC)"
+                onClick={() => setShowOpacityDialog(false)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="opacity-control">
+              <input
+                className="opacity-slider"
+                aria-label="窗口透明度"
+                type="range"
+                min={0.1}
+                max={1}
+                step={0.01}
+                value={opacity}
+                onChange={(event) => setOpacity(parseFloat(event.target.value))}
+              />
+              <output>{Math.round(opacity * 100)}%</output>
+            </div>
+          </section>
+        </div>
+      )}
+
       {/* 顶部 32px 独立标题栏:始终占位,默认透明,不覆盖网页区域。 */}
       <div
-        className={`titlebar ${titlebarVisible ? 'visible' : ''}`}
+        className={`titlebar ${titlebarVisible || addressBarFocused ? 'visible' : ''}`}
         title="拖动窗口"
         onMouseDown={(e) => {
           e.preventDefault();
@@ -392,6 +523,75 @@ function App() {
             onMouseDown={(e) => e.stopPropagation()}
             onClick={() => window.opabrow.minimizeWindow()}
           />
+        </div>
+        <div className="titlebar-address">
+          <input
+            ref={addressInputRef}
+            className="titlebar-address-input"
+            type="text"
+            value={url}
+            onChange={(event) => {
+              setUrl(event.target.value);
+              setActiveSuggestionIndex(-1);
+            }}
+            onFocus={() => {
+              setAddressBarFocused(true);
+              setActiveSuggestionIndex(-1);
+            }}
+            onBlur={() => {
+              setAddressBarFocused(false);
+              setActiveSuggestionIndex(-1);
+            }}
+            onMouseDown={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowDown' && addressSuggestions.length > 0) {
+                event.preventDefault();
+                setActiveSuggestionIndex((index) => (index + 1) % addressSuggestions.length);
+                return;
+              }
+              if (event.key === 'ArrowUp' && addressSuggestions.length > 0) {
+                event.preventDefault();
+                setActiveSuggestionIndex((index) =>
+                  index <= 0 ? addressSuggestions.length - 1 : index - 1
+                );
+                return;
+              }
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                const suggestion = addressSuggestions[activeSuggestionIndex];
+                goUrl(suggestion?.url);
+                return;
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                setUrl(currentUrl);
+                event.currentTarget.blur();
+              }
+            }}
+            aria-label="地址栏"
+            placeholder="输入网址或搜索词"
+            spellCheck={false}
+          />
+          {addressSuggestions.length > 0 && (
+            <div className="address-suggestions" role="listbox" aria-label="历史记录">
+              {addressSuggestions.map((entry, index) => (
+                <button
+                  key={entry.url}
+                  type="button"
+                  className={`address-suggestion ${index === activeSuggestionIndex ? 'active' : ''}`}
+                  role="option"
+                  aria-selected={index === activeSuggestionIndex}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  onClick={() => goUrl(entry.url)}
+                >
+                  <span>{formatHistoryUrl(entry.url)}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
