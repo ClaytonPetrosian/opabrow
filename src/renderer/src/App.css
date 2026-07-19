@@ -338,6 +338,7 @@ body {
   position: relative;
   flex: 0 1 auto;
   width: fit-content;
+  min-width: 0;
   max-width: 500px;
   margin-left: 18px;
   -webkit-app-region: no-drag;
@@ -350,6 +351,8 @@ body {
 
 .titlebar-address-preview {
   display: block;
+  width: 100%;
+  min-width: 0;
   max-width: 500px;
   padding: 0 4px;
   overflow: hidden;
