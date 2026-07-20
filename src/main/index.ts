@@ -1,5 +1,7 @@
-import { app, BrowserWindow, dialog, shell, ipcMain, Menu, MenuItemConstructorOptions, screen } from 'electron';
-import { join } from 'node:path';
+import { app, BrowserWindow, dialog, shell, ipcMain, Menu, MenuItemConstructorOptions, screen, session } from 'electron';
+import { basename, extname, join } from 'node:path';
+import { existsSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import {
   BookmarkNode,
@@ -10,15 +12,19 @@ import {
 } from './bookmarks';
 import { PasswordStore } from './passwords';
 import { HistoryEntry, sanitizeHistoryEntries } from './history';
+import { AppSession, DownloadEntry, SessionStore, sanitizeSessionPatch } from './session';
 
 // ---------- 窗口引用 ----------
 let mainWindow: BrowserWindow | null = null;
 let bookmarkStore: BookmarkStore | null = null;
 let passwordStore: PasswordStore | null = null;
+let sessionStore: SessionStore | null = null;
 let mobileModeEnabled = false;
 let ipcHandlersRegistered = false;
 let recentHistory: HistoryEntry[] = [];
+let recentDownloads: DownloadEntry[] = [];
 const TITLEBAR_HEIGHT = 32;
+const DOWNLOAD_LIMIT = 30;
 
 // ---------- 全局拦截所有 webContents 的新窗口请求 ----------
 // 关键:webview 标签内的 <a target="_blank"> 链接会创建新的 BrowserWindow
@@ -42,16 +48,19 @@ const CHROME_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36 opabrow/0.1';
 
 // ---------- 创建主窗口 ----------
-function createMainWindow(): BrowserWindow {
+function createMainWindow(sessionState: AppSession): BrowserWindow {
+  const bounds = sessionState.bounds;
   const win = new BrowserWindow({
-    width: 1200,
-    height: 832,
+    width: bounds?.width ?? 1200,
+    height: bounds?.height ?? 832,
+    ...(bounds ? { x: bounds.x, y: bounds.y } : {}),
     show: true, // 立刻显示,免得 macOS 透明窗口被吞
     transparent: true,
     frame: false,
     titleBarStyle: 'hiddenInset', // macOS 隐藏标题栏
     trafficLightPosition: { x: -100, y: -100 }, // 把红绿黄按钮挪出可见区
     hasShadow: true,
+    opacity: sessionState.opacity,
     backgroundColor: '#00000000', // 完全透明
     movable: true, // 允许拖动
     resizable: true,
@@ -70,6 +79,7 @@ function createMainWindow(): BrowserWindow {
 
   // 自定义 UA
   win.webContents.setUserAgent(CHROME_UA);
+  win.setAlwaysOnTop(sessionState.alwaysOnTop, sessionState.alwaysOnTop ? 'floating' : 'normal');
 
   // 加载 dev / prod URL
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
@@ -106,8 +116,34 @@ function createMainWindow(): BrowserWindow {
   });
 
   installTitlebarHoverTracking(win);
+  installWindowSessionTracking(win);
 
   return win;
+}
+
+function installWindowSessionTracking(win: BrowserWindow): void {
+  let saveTimer: NodeJS.Timeout | null = null;
+  const saveBounds = (): void => {
+    if (!win.isDestroyed()) sessionStore?.update({ bounds: win.getBounds() });
+  };
+  const scheduleSave = (): void => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      saveBounds();
+    }, 200);
+  };
+
+  win.on('resize', scheduleSave);
+  win.on('move', scheduleSave);
+  win.on('close', () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveBounds();
+    void sessionStore?.flush();
+  });
+  win.once('closed', () => {
+    if (saveTimer) clearTimeout(saveTimer);
+  });
 }
 
 // 标题栏区域独立占据窗口顶部 32px,通过屏幕坐标检测 hover,不依赖 webview 的鼠标事件。
@@ -166,6 +202,74 @@ function historyMenuItems(entries: HistoryEntry[], win: BrowserWindow): MenuItem
     toolTip: entry.url,
     click: () => win.webContents.send('menu-action', 'history_open', entry.url)
   }));
+}
+
+function downloadMenuItems(entries: DownloadEntry[]): MenuItemConstructorOptions[] {
+  if (entries.length === 0) return [{ label: '暂无下载记录', enabled: false }];
+
+  return entries.slice(0, 8).map((entry) => ({
+    label: entry.filename,
+    toolTip: entry.state === 'completed' ? '在 Finder 中显示' : entry.state === 'failed' ? '下载失败' : '正在下载',
+    enabled: entry.state === 'completed',
+    click: () => shell.showItemInFolder(entry.savePath)
+  }));
+}
+
+function nextDownloadPath(filename: string): string {
+  const directory = app.getPath('downloads');
+  const safeFilename = basename(filename) || 'download';
+  const extension = extname(safeFilename);
+  const name = extension ? safeFilename.slice(0, -extension.length) : safeFilename;
+  let candidate = join(directory, safeFilename);
+  let suffix = 1;
+  while (existsSync(candidate)) {
+    candidate = join(directory, `${name} (${suffix})${extension}`);
+    suffix += 1;
+  }
+  return candidate;
+}
+
+function updateDownload(entry: DownloadEntry): void {
+  recentDownloads = [entry, ...recentDownloads.filter((item) => item.id !== entry.id)].slice(0, DOWNLOAD_LIMIT);
+  sessionStore?.update({ downloads: recentDownloads });
+  refreshApplicationMenu();
+  mainWindow?.webContents.send('download-update', entry);
+}
+
+function installDownloadTracking(): void {
+  session.defaultSession.on('will-download', (_event, item, contents) => {
+    if (!mainWindow || contents.id === mainWindow.webContents.id) return;
+
+    const entry: DownloadEntry = {
+      id: randomUUID(),
+      url: item.getURL(),
+      filename: item.getFilename(),
+      savePath: nextDownloadPath(item.getFilename()),
+      receivedBytes: item.getReceivedBytes(),
+      totalBytes: item.getTotalBytes(),
+      state: 'progressing',
+      createdAt: Date.now()
+    };
+    item.setSavePath(entry.savePath);
+    updateDownload(entry);
+
+    item.on('updated', (_event, state) => {
+      updateDownload({
+        ...entry,
+        receivedBytes: item.getReceivedBytes(),
+        totalBytes: item.getTotalBytes(),
+        state: state === 'interrupted' ? 'failed' : 'progressing'
+      });
+    });
+    item.once('done', (_event, state) => {
+      updateDownload({
+        ...entry,
+        receivedBytes: item.getReceivedBytes(),
+        totalBytes: item.getTotalBytes(),
+        state: state === 'completed' ? 'completed' : 'failed'
+      });
+    });
+  });
 }
 
 function refreshApplicationMenu(): void {
@@ -235,6 +339,22 @@ function buildAppMenu(win: BrowserWindow, bookmarks: BookmarkStore, passwords: P
         label: '聚焦地址栏',
         accelerator: 'CmdOrCtrl+L',
         click: () => win.webContents.send('menu-action', 'go_url')
+      },
+      { type: 'separator' },
+      {
+        label: '在页面中查找',
+        accelerator: 'CmdOrCtrl+F',
+        click: () => win.webContents.send('menu-action', 'show_find')
+      },
+      {
+        label: '查找下一个',
+        accelerator: 'CmdOrCtrl+G',
+        click: () => win.webContents.send('menu-action', 'find_next')
+      },
+      {
+        label: '查找上一个',
+        accelerator: 'CmdOrCtrl+Shift+G',
+        click: () => win.webContents.send('menu-action', 'find_previous')
       },
       { type: 'separator' },
       {
@@ -366,6 +486,19 @@ function buildAppMenu(win: BrowserWindow, bookmarks: BookmarkStore, passwords: P
     ]
   };
 
+  const downloadsMenu: MenuItemConstructorOptions = {
+    label: '下载',
+    submenu: [
+      {
+        label: '显示下载',
+        accelerator: 'CmdOrCtrl+Shift+J',
+        click: () => win.webContents.send('menu-action', 'show_downloads')
+      },
+      { type: 'separator' },
+      ...downloadMenuItems(recentDownloads)
+    ]
+  };
+
   const passwordsMenu: MenuItemConstructorOptions = {
     label: '密码',
     submenu: [
@@ -470,6 +603,7 @@ function buildAppMenu(win: BrowserWindow, bookmarks: BookmarkStore, passwords: P
         checked: mobileModeEnabled,
         click: (menuItem) => {
           mobileModeEnabled = menuItem.checked;
+          sessionStore?.update({ mobileMode: mobileModeEnabled });
           win.webContents.send('menu-action', 'mobile_mode_toggle', menuItem.checked);
         }
       },
@@ -511,8 +645,8 @@ function buildAppMenu(win: BrowserWindow, bookmarks: BookmarkStore, passwords: P
   };
 
   const template: MenuItemConstructorOptions[] = isMac
-    ? [appMenu, editMenu, browseMenu, historyMenu, bookmarksMenu, passwordsMenu, viewMenu, windowMenu]
-    : [editMenu, browseMenu, historyMenu, bookmarksMenu, passwordsMenu, viewMenu, windowMenu];
+    ? [appMenu, editMenu, browseMenu, historyMenu, downloadsMenu, bookmarksMenu, passwordsMenu, viewMenu, windowMenu]
+    : [editMenu, browseMenu, historyMenu, downloadsMenu, bookmarksMenu, passwordsMenu, viewMenu, windowMenu];
 
   return Menu.buildFromTemplate(template);
 }
@@ -526,12 +660,14 @@ function registerIpc(bookmarks: BookmarkStore, passwords: PasswordStore): void {
   ipcMain.handle('set-opacity', (_e, opacity: number) => {
     const v = Math.max(0.1, Math.min(1.0, opacity));
     mainWindow?.setOpacity(v);
+    sessionStore?.update({ opacity: v });
     return v;
   });
 
   // 设置窗口置顶
   ipcMain.handle('set-always-on-top', (_e, onTop: boolean) => {
     mainWindow?.setAlwaysOnTop(onTop, onTop ? 'floating' : 'normal');
+    sessionStore?.update({ alwaysOnTop: onTop === true });
     return onTop;
   });
 
@@ -583,6 +719,30 @@ function registerIpc(bookmarks: BookmarkStore, passwords: PasswordStore): void {
     return confirmAndClearHistory(mainWindow);
   });
 
+  ipcMain.handle('get-session', (event) => {
+    if (event.sender.id !== mainWindow?.webContents.id) return null;
+    return sessionStore?.getSnapshot() ?? null;
+  });
+
+  ipcMain.handle('save-session', (event, patch: unknown) => {
+    if (event.sender.id !== mainWindow?.webContents.id) return null;
+    sessionStore?.update(sanitizeSessionPatch(patch));
+    return sessionStore?.getSnapshot() ?? null;
+  });
+
+  ipcMain.handle('get-downloads', (event) => {
+    if (event.sender.id !== mainWindow?.webContents.id) return [];
+    return recentDownloads;
+  });
+
+  ipcMain.handle('show-download-in-folder', (event, id: unknown) => {
+    if (event.sender.id !== mainWindow?.webContents.id || typeof id !== 'string') return false;
+    const entry = recentDownloads.find((item) => item.id === id && item.state === 'completed');
+    if (!entry) return false;
+    shell.showItemInFolder(entry.savePath);
+    return true;
+  });
+
   ipcMain.handle('list-password-matches', (event, url: unknown) => {
     if (event.sender.id !== mainWindow?.webContents.id || typeof url !== 'string') return [];
     return passwords.getMatches(url);
@@ -613,17 +773,23 @@ app.whenReady().then(async () => {
 
   bookmarkStore = new BookmarkStore(join(app.getPath('userData'), 'bookmarks.json'));
   passwordStore = new PasswordStore(join(app.getPath('userData'), 'passwords.json'));
+  sessionStore = new SessionStore(join(app.getPath('userData'), 'session.json'));
   await bookmarkStore.load();
   await passwordStore.load();
+  await sessionStore.load();
+  const sessionState = sessionStore.getSnapshot();
+  mobileModeEnabled = sessionState.mobileMode;
+  recentDownloads = sessionState.downloads;
+  installDownloadTracking();
 
-  mainWindow = createMainWindow();
+  mainWindow = createMainWindow(sessionState);
   registerIpc(bookmarkStore, passwordStore);
 
   refreshApplicationMenu();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      mainWindow = createMainWindow();
+      mainWindow = createMainWindow(sessionStore?.getSnapshot() ?? sessionState);
       refreshApplicationMenu();
     }
   });

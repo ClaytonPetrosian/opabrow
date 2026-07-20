@@ -18,6 +18,8 @@ declare namespace Electron {
     executeJavaScript(code: string): Promise<unknown>;
     canGoBack(): boolean;
     canGoForward(): boolean;
+    findInPage(text: string, options?: { forward?: boolean; findNext?: boolean; matchCase?: boolean }): number;
+    stopFindInPage(action: 'clearSelection' | 'keepSelection' | 'activateSelection'): void;
     stop(): void;
     clearHistory(): void;
     openDevTools(): void;

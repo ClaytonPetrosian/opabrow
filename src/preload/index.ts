@@ -20,7 +20,11 @@ export type MenuAction =
   | 'show_quickbar'
   | 'show_history'
   | 'history_open'
-  | 'history_clear';
+  | 'history_clear'
+  | 'show_find'
+  | 'find_next'
+  | 'find_previous'
+  | 'show_downloads';
 
 export type PasswordMatch = {
   id: string;
@@ -38,6 +42,24 @@ export type HistoryEntry = {
   visitedAt: number;
 };
 
+export type DownloadEntry = {
+  id: string;
+  url: string;
+  filename: string;
+  savePath: string;
+  receivedBytes: number;
+  totalBytes: number;
+  state: 'progressing' | 'completed' | 'failed';
+  createdAt: number;
+};
+
+export type SavedSession = {
+  url: string | null;
+  opacity: number;
+  alwaysOnTop: boolean;
+  mobileMode: boolean;
+};
+
 const api = {
   // 窗口控制
   setOpacity: (opacity: number) => ipcRenderer.invoke('set-opacity', opacity),
@@ -53,6 +75,10 @@ const api = {
   toggleBookmark: (page: { url: string; title: string }) => ipcRenderer.invoke('toggle-bookmark', page),
   syncHistory: (entries: HistoryEntry[]) => ipcRenderer.invoke('sync-history', entries),
   clearHistory: (): Promise<boolean> => ipcRenderer.invoke('clear-history'),
+  getSession: (): Promise<SavedSession | null> => ipcRenderer.invoke('get-session'),
+  saveSession: (session: SavedSession) => ipcRenderer.invoke('save-session', session),
+  getDownloads: (): Promise<DownloadEntry[]> => ipcRenderer.invoke('get-downloads'),
+  showDownloadInFolder: (id: string): Promise<boolean> => ipcRenderer.invoke('show-download-in-folder', id),
   listPasswordMatches: (url: string): Promise<PasswordMatch[]> => ipcRenderer.invoke('list-password-matches', url),
   getPasswordForFill: (request: { id: string; url: string }): Promise<PasswordToFill | null> =>
     ipcRenderer.invoke('get-password-for-fill', request),
@@ -82,6 +108,14 @@ const api = {
     ipcRenderer.on('titlebar-visibility', handler);
     return (): void => {
       ipcRenderer.removeListener('titlebar-visibility', handler);
+    };
+  },
+
+  onDownloadUpdate: (callback: (entry: DownloadEntry) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, entry: DownloadEntry) => callback(entry);
+    ipcRenderer.on('download-update', handler);
+    return (): void => {
+      ipcRenderer.removeListener('download-update', handler);
     };
   }
 };
