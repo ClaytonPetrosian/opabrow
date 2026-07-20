@@ -17,7 +17,10 @@ export type MenuAction =
   | 'show_opacity_dialog'
   | 'opacity_inc'
   | 'opacity_dec'
-  | 'show_quickbar';
+  | 'show_quickbar'
+  | 'show_history'
+  | 'history_open'
+  | 'history_clear';
 
 export type PasswordMatch = {
   id: string;
@@ -27,6 +30,12 @@ export type PasswordMatch = {
 
 export type PasswordToFill = PasswordMatch & {
   password: string;
+};
+
+export type HistoryEntry = {
+  url: string;
+  title: string;
+  visitedAt: number;
 };
 
 const api = {
@@ -42,6 +51,8 @@ const api = {
   readClipboardText: () => clipboard.readText(),
   writeClipboardText: (text: string) => clipboard.writeText(text),
   toggleBookmark: (page: { url: string; title: string }) => ipcRenderer.invoke('toggle-bookmark', page),
+  syncHistory: (entries: HistoryEntry[]) => ipcRenderer.invoke('sync-history', entries),
+  clearHistory: (): Promise<boolean> => ipcRenderer.invoke('clear-history'),
   listPasswordMatches: (url: string): Promise<PasswordMatch[]> => ipcRenderer.invoke('list-password-matches', url),
   getPasswordForFill: (request: { id: string; url: string }): Promise<PasswordToFill | null> =>
     ipcRenderer.invoke('get-password-for-fill', request),

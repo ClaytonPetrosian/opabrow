@@ -77,6 +77,8 @@ Move the pointer to the top edge or press `Cmd+L`. When idle, the address is a c
 
 As you type, opabrow suggests up to five matching pages from the local navigation history. Suggestions place the page title first and the URL second; use the arrow keys to choose a result, then press `Enter`.
 
+Open **History > Show history** or press `Cmd+Shift+Y` to search, reopen, or clear recent pages. The **History** menu also keeps the ten most recent pages one click away. opabrow stores up to 100 history entries locally on this Mac; it has no account or cloud history sync.
+
 The default home page is the opabrow project repository. In the **Browse** menu, choose **Set current page as home** to make any visited page your local home page, or **Restore project home** to reset it.
 
 ### Bilibili video pages
