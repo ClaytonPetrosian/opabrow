@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { Clock3, Minus, Pin, Search, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clock3, Download, FolderOpen, Minus, Pin, Search, Trash2, X } from 'lucide-react';
 
 const DEFAULT_HOME_URL = 'https://github.com/ClaytonPetrosian/opabrow';
 const DESKTOP_USER_AGENT =
@@ -21,6 +21,17 @@ type PasswordMatch = {
   id: string;
   origin: string;
   username: string;
+};
+
+type DownloadEntry = {
+  id: string;
+  url: string;
+  filename: string;
+  savePath: string;
+  receivedBytes: number;
+  totalBytes: number;
+  state: 'progressing' | 'completed' | 'failed';
+  createdAt: number;
 };
 
 function readHistory(): HistoryEntry[] {
@@ -146,6 +157,12 @@ function formatHistoryTime(visitedAt: number): string {
   return new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(date);
 }
 
+function formatBytes(value: number): string {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(value < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+}
+
 function App() {
   const [homeUrl, setHomeUrl] = useState(readHomeUrl);
   const [url, setUrl] = useState(readHomeUrl);
@@ -154,8 +171,13 @@ function App() {
   const [opacity, setOpacity] = useState(1.0);
   const [onTop, setOnTop] = useState(false);
   const [mobileMode, setMobileMode] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
   const [showOpacityDialog, setShowOpacityDialog] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showDownloads, setShowDownloads] = useState(false);
+  const [showFind, setShowFind] = useState(false);
+  const [findQuery, setFindQuery] = useState('');
+  const [findResult, setFindResult] = useState({ matches: 0, activeMatchOrdinal: 0 });
   const [historyQuery, setHistoryQuery] = useState('');
   const [titlebarVisible, setTitlebarVisible] = useState(false);
   const [addressBarFocused, setAddressBarFocused] = useState(false);
@@ -164,13 +186,18 @@ function App() {
   const [passwordMatches, setPasswordMatches] = useState<PasswordMatch[] | null>(null);
   const [passwordFillUrl, setPasswordFillUrl] = useState('');
   const [passwordStatus, setPasswordStatus] = useState<string | null>(null);
+  const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
+  const [downloads, setDownloads] = useState<DownloadEntry[]>([]);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const webviewReadyRef = useRef(false);
   const webviewContainerRef = useRef<HTMLDivElement>(null);
   const quickInputRef = useRef<HTMLInputElement>(null);
   const addressInputRef = useRef<HTMLInputElement>(null);
   const historyInputRef = useRef<HTMLInputElement>(null);
+  const findInputRef = useRef<HTMLInputElement>(null);
   const homeUrlRef = useRef(homeUrl);
+  const findQueryRef = useRef(findQuery);
+  const mobileModeRef = useRef(mobileMode);
 
   const loadInWebview = (targetUrl: string) => {
     const wv = webviewRef.current;
@@ -194,13 +221,50 @@ function App() {
 
   // 透明度变化 → main process
   useEffect(() => {
+    if (!sessionReady) return;
     window.opabrow.setOpacity(opacity);
-  }, [opacity]);
+  }, [opacity, sessionReady]);
 
   // 置顶状态变化 → main process
   useEffect(() => {
+    if (!sessionReady) return;
     window.opabrow.setAlwaysOnTop(onTop);
-  }, [onTop]);
+  }, [onTop, sessionReady]);
+
+  // 只从本机主进程恢复会话，不接受网页内容传入的状态。
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([window.opabrow.getSession(), window.opabrow.getDownloads()]).then(([saved, storedDownloads]) => {
+      if (cancelled) return;
+      if (saved) {
+        if (saved.url) {
+          setCurrentUrl(saved.url);
+          setUrl(saved.url);
+        }
+        setOpacity(saved.opacity);
+        setOnTop(saved.alwaysOnTop);
+        setMobileMode(saved.mobileMode);
+      }
+      setDownloads(storedDownloads);
+      setSessionReady(true);
+    }).catch((error) => {
+      console.warn('session restore failed:', error);
+      if (!cancelled) setSessionReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!sessionReady) return;
+    void window.opabrow.saveSession({
+      url: currentUrl,
+      opacity,
+      alwaysOnTop: onTop,
+      mobileMode
+    }).catch((error) => console.warn('session save failed:', error));
+  }, [currentUrl, mobileMode, onTop, opacity, sessionReady]);
 
   useEffect(() => {
     localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(historyEntries));
@@ -215,9 +279,32 @@ function App() {
   }, [showHistory]);
 
   useEffect(() => {
+    if (!showFind) return;
+    window.setTimeout(() => findInputRef.current?.focus(), 0);
+  }, [showFind]);
+
+  useEffect(() => {
+    findQueryRef.current = findQuery;
+    if (!showFind) return;
+    const webview = webviewRef.current;
+    if (!webview) return;
+    const query = findQuery.trim();
+    if (!query) {
+      webview.stopFindInPage('clearSelection');
+      setFindResult({ matches: 0, activeMatchOrdinal: 0 });
+      return;
+    }
+    webview.findInPage(query, { forward: true, findNext: false, matchCase: false });
+  }, [findQuery, showFind]);
+
+  useEffect(() => {
     homeUrlRef.current = homeUrl;
     localStorage.setItem(HOME_URL_STORAGE_KEY, homeUrl);
   }, [homeUrl]);
+
+  useEffect(() => {
+    mobileModeRef.current = mobileMode;
+  }, [mobileMode]);
 
   // 挂载 webview (动态创建,绕过 React 编译对 <webview> tag 的处理)
   useEffect(() => {
@@ -253,6 +340,14 @@ function App() {
     // renderer 只负责把实际导航结果同步回 quick bar。
     const onDomReady = () => {
       webviewReadyRef.current = true;
+      if (mobileModeRef.current) {
+        try {
+          wv.setUserAgent(MOBILE_USER_AGENT);
+          wv.reload();
+        } catch (error) {
+          console.warn('webview user agent restore failed:', error);
+        }
+      }
     };
     wv.addEventListener('dom-ready', onDomReady);
 
@@ -272,6 +367,18 @@ function App() {
       if (title && pageUrl) recordHistory(pageUrl, title);
     };
     wv.addEventListener('page-title-updated', syncTitle);
+
+    const syncFindResult = (e: Event) => {
+      const result = (e as unknown as {
+        result?: { matches?: number; activeMatchOrdinal?: number; finalUpdate?: boolean };
+      }).result;
+      if (!result?.finalUpdate) return;
+      setFindResult({
+        matches: result.matches ?? 0,
+        activeMatchOrdinal: result.activeMatchOrdinal ?? 0
+      });
+    };
+    wv.addEventListener('found-in-page', syncFindResult);
 
     const enterBilibiliWebFullscreen = () => {
       const pageUrl = wv.getURL();
@@ -311,6 +418,7 @@ function App() {
       resizeObserver.disconnect();
       wv.removeEventListener('dom-ready', onDomReady);
       wv.removeEventListener('page-title-updated', syncTitle);
+      wv.removeEventListener('found-in-page', syncFindResult);
       wv.removeEventListener('did-finish-load', enterBilibiliWebFullscreen);
       wv.remove();
       webviewRef.current = null;
@@ -330,7 +438,7 @@ function App() {
   // 手机模式通过切换 webview 的浏览器标识实现，并重新载入当前页面让网站按移动端返回内容。
   useEffect(() => {
     const wv = webviewRef.current;
-    if (!wv) return;
+    if (!wv || !sessionReady || !webviewReadyRef.current) return;
 
     try {
       wv.setUserAgent(mobileMode ? MOBILE_USER_AGENT : DESKTOP_USER_AGENT);
@@ -338,7 +446,7 @@ function App() {
     } catch (error) {
       console.warn('webview user agent update failed:', error);
     }
-  }, [mobileMode]);
+  }, [mobileMode, sessionReady]);
 
   // 菜单事件订阅
   useEffect(() => {
@@ -350,6 +458,15 @@ function App() {
         case 'show_quickbar':
           setShowQuickBar(true);
           setTimeout(() => quickInputRef.current?.focus(), 50);
+          break;
+        case 'show_find':
+          openFind();
+          break;
+        case 'find_next':
+          findNext(true);
+          break;
+        case 'find_previous':
+          findNext(false);
           break;
         case 'reload':
           reload();
@@ -407,6 +524,9 @@ function App() {
           setHistoryQuery('');
           setShowHistory(true);
           break;
+        case 'show_downloads':
+          setShowDownloads(true);
+          break;
         case 'history_open':
           if (typeof value === 'string') goUrl(value);
           break;
@@ -434,6 +554,8 @@ function App() {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (passwordMatches) setPasswordMatches(null);
+        else if (showFind) closeFind();
+        else if (showDownloads) setShowDownloads(false);
         else if (showHistory) setShowHistory(false);
         else if (showOpacityDialog) setShowOpacityDialog(false);
         else if (showQuickBar) setShowQuickBar(false);
@@ -441,7 +563,16 @@ function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [passwordMatches, showHistory, showOpacityDialog, showQuickBar]);
+  }, [passwordMatches, showDownloads, showFind, showHistory, showOpacityDialog, showQuickBar]);
+
+  useEffect(() => {
+    const off = window.opabrow.onDownloadUpdate((entry) => {
+      setDownloads((items) => [entry, ...items.filter((item) => item.id !== entry.id)]);
+      if (entry.state === 'completed') showDownloadStatus(`下载完成：${entry.filename}`);
+      if (entry.state === 'failed') showDownloadStatus(`下载失败：${entry.filename}`);
+    });
+    return off;
+  }, []);
 
   // 监听 main 进程发来的 "iframe 跳转" 请求
   useEffect(() => {
@@ -542,6 +673,17 @@ function App() {
       if (e.key === 'l' && !e.shiftKey) {
         e.preventDefault();
         focusAddressBar();
+        return;
+      }
+      // ⌘F / ⌘G 页面内查找
+      if (e.key.toLowerCase() === 'f' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        openFind();
+        return;
+      }
+      if (e.key.toLowerCase() === 'g' && !e.altKey) {
+        e.preventDefault();
+        findNext(!e.shiftKey);
       }
     };
     window.addEventListener('keydown', handler);
@@ -563,6 +705,7 @@ function App() {
     setCurrentUrl(next);
     setShowQuickBar(false);
     setShowHistory(false);
+    closeFind();
     setAddressBarFocused(false);
     setActiveSuggestionIndex(-1);
     addressInputRef.current?.blur();
@@ -585,11 +728,39 @@ function App() {
     }
   }
 
+  function openFind() {
+    setShowFind(true);
+    window.setTimeout(() => findInputRef.current?.select(), 0);
+  }
+
+  function closeFind() {
+    webviewRef.current?.stopFindInPage('clearSelection');
+    setShowFind(false);
+    setFindQuery('');
+    setFindResult({ matches: 0, activeMatchOrdinal: 0 });
+  }
+
+  function findNext(forward: boolean) {
+    const query = findQueryRef.current.trim();
+    if (!query) {
+      openFind();
+      return;
+    }
+    webviewRef.current?.findInPage(query, { forward, findNext: true, matchCase: false });
+  }
+
   function showPasswordStatus(message: string) {
     setPasswordStatus(message);
     window.setTimeout(() => {
       setPasswordStatus((current) => (current === message ? null : current));
     }, 3_500);
+  }
+
+  function showDownloadStatus(message: string) {
+    setDownloadStatus(message);
+    window.setTimeout(() => {
+      setDownloadStatus((current) => (current === message ? null : current));
+    }, 4_000);
   }
 
   async function requestPasswordFill() {
@@ -753,6 +924,41 @@ function App() {
         </div>
       )}
 
+      {showFind && (
+        <div className="find-bar" role="search" aria-label="在页面中查找">
+          <Search size={15} aria-hidden="true" />
+          <input
+            ref={findInputRef}
+            type="search"
+            value={findQuery}
+            onChange={(event) => setFindQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                findNext(!event.shiftKey);
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                closeFind();
+              }
+            }}
+            placeholder="在页面中查找"
+            aria-label="查找文本"
+            spellCheck={false}
+          />
+          <output className="find-count" aria-live="polite">
+            {findQuery.trim() ? `${findResult.activeMatchOrdinal || 0}/${findResult.matches}` : ''}
+          </output>
+          <button type="button" className="find-button" title="上一个匹配项 (⌘⇧G)" aria-label="上一个匹配项" onClick={() => findNext(false)}>
+            <ChevronUp size={15} aria-hidden="true" />
+          </button>
+          <button type="button" className="find-button" title="下一个匹配项 (⌘G)" aria-label="下一个匹配项" onClick={() => findNext(true)}>
+            <ChevronDown size={15} aria-hidden="true" />
+          </button>
+          <button type="button" className="dialog-close" title="关闭 (ESC)" aria-label="关闭查找" onClick={closeFind}>×</button>
+        </div>
+      )}
+
       {showOpacityDialog && (
         <div
           className="dialog-backdrop"
@@ -867,6 +1073,62 @@ function App() {
                 ))
               ) : (
                 <p className="history-empty">{historyEntries.length === 0 ? '还没有历史记录' : '没有匹配的历史记录'}</p>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {showDownloads && (
+        <div className="dialog-backdrop" role="presentation" onMouseDown={() => setShowDownloads(false)}>
+          <section
+            className="downloads-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="downloads-dialog-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="dialog-heading">
+              <div className="history-heading-title">
+                <Download size={16} aria-hidden="true" />
+                <h2 id="downloads-dialog-title">下载</h2>
+              </div>
+              <button type="button" className="dialog-close" aria-label="关闭" title="关闭 (ESC)" onClick={() => setShowDownloads(false)}>×</button>
+            </div>
+            <div className="downloads-list">
+              {downloads.length > 0 ? (
+                downloads.map((entry) => {
+                  const progress = entry.totalBytes > 0 ? Math.min(100, (entry.receivedBytes / entry.totalBytes) * 100) : 0;
+                  const status = entry.state === 'completed'
+                    ? '已完成'
+                    : entry.state === 'failed'
+                      ? '下载失败'
+                      : entry.totalBytes > 0
+                        ? `${formatBytes(entry.receivedBytes)} / ${formatBytes(entry.totalBytes)}`
+                        : `${formatBytes(entry.receivedBytes)} 已下载`;
+                  return (
+                    <div className="download-entry" key={entry.id}>
+                      <div className="download-entry-main">
+                        <span className="download-entry-title" title={entry.filename}>{entry.filename}</span>
+                        <span className={`download-entry-status ${entry.state}`}>{status}</span>
+                        {entry.state === 'progressing' && <span className="download-progress"><span style={{ width: `${progress}%` }} /></span>}
+                      </div>
+                      {entry.state === 'completed' && (
+                        <button
+                          type="button"
+                          className="dialog-icon-button"
+                          aria-label="在 Finder 中显示"
+                          title="在 Finder 中显示"
+                          onClick={() => void window.opabrow.showDownloadInFolder(entry.id)}
+                        >
+                          <FolderOpen size={16} aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="history-empty">还没有下载记录</p>
               )}
             </div>
           </section>
@@ -1065,6 +1327,7 @@ function App() {
       {/* webview 容器:从标题栏下方开始,网页大小不受标题栏显隐影响。 */}
       <div className="webview-container" ref={webviewContainerRef} />
       {passwordStatus && <div className="password-status" role="status">{passwordStatus}</div>}
+      {downloadStatus && <div className="password-status" role="status">{downloadStatus}</div>}
     </div>
   );
 }
