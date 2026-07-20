@@ -9,6 +9,7 @@ import {
   importSafariBookmarksFromDisk
 } from './bookmarks';
 import { PasswordStore } from './passwords';
+import { HistoryEntry, sanitizeHistoryEntries } from './history';
 
 // ---------- 窗口引用 ----------
 let mainWindow: BrowserWindow | null = null;
@@ -16,6 +17,7 @@ let bookmarkStore: BookmarkStore | null = null;
 let passwordStore: PasswordStore | null = null;
 let mobileModeEnabled = false;
 let ipcHandlersRegistered = false;
+let recentHistory: HistoryEntry[] = [];
 const TITLEBAR_HEIGHT = 32;
 
 // ---------- 全局拦截所有 webContents 的新窗口请求 ----------
@@ -154,6 +156,18 @@ function bookmarkMenuItems(nodes: BookmarkNode[], win: BrowserWindow): MenuItemC
   });
 }
 
+function historyMenuItems(entries: HistoryEntry[], win: BrowserWindow): MenuItemConstructorOptions[] {
+  if (entries.length === 0) {
+    return [{ label: '暂无历史记录', enabled: false }];
+  }
+
+  return entries.slice(0, 10).map((entry) => ({
+    label: entry.title,
+    toolTip: entry.url,
+    click: () => win.webContents.send('menu-action', 'history_open', entry.url)
+  }));
+}
+
 function refreshApplicationMenu(): void {
   if (!mainWindow || mainWindow.isDestroyed() || !bookmarkStore || !passwordStore) return;
   Menu.setApplicationMenu(buildAppMenu(mainWindow, bookmarkStore, passwordStore));
@@ -175,6 +189,25 @@ async function showImportResult(win: BrowserWindow, source: string, importBookma
       message: error instanceof Error ? error.message : '导入过程中发生未知错误。'
     });
   }
+}
+
+async function confirmAndClearHistory(win: BrowserWindow): Promise<boolean> {
+  if (recentHistory.length === 0) return false;
+
+  const result = await dialog.showMessageBox(win, {
+    type: 'warning',
+    title: '清空历史记录',
+    message: '确定要删除 opabrow 本机保存的全部历史记录吗？此操作无法撤销。',
+    buttons: ['取消', '清空'],
+    defaultId: 0,
+    cancelId: 0
+  });
+  if (result.response !== 1) return false;
+
+  recentHistory = [];
+  refreshApplicationMenu();
+  win.webContents.send('menu-action', 'history_clear');
+  return true;
 }
 
 function buildAppMenu(win: BrowserWindow, bookmarks: BookmarkStore, passwords: PasswordStore): Menu {
@@ -307,6 +340,27 @@ function buildAppMenu(win: BrowserWindow, bookmarks: BookmarkStore, passwords: P
             await bookmarks.clear();
             refreshApplicationMenu();
           })().catch((error) => console.warn('Could not clear bookmarks:', error));
+        }
+      }
+    ]
+  };
+
+  const historyMenu: MenuItemConstructorOptions = {
+    label: '历史',
+    submenu: [
+      {
+        label: '显示历史记录',
+        accelerator: 'CmdOrCtrl+Shift+Y',
+        click: () => win.webContents.send('menu-action', 'show_history')
+      },
+      { type: 'separator' },
+      ...historyMenuItems(recentHistory, win),
+      { type: 'separator' },
+      {
+        label: '清空历史记录…',
+        enabled: recentHistory.length > 0,
+        click: () => {
+          void confirmAndClearHistory(win).catch((error) => console.warn('Could not clear history:', error));
         }
       }
     ]
@@ -457,8 +511,8 @@ function buildAppMenu(win: BrowserWindow, bookmarks: BookmarkStore, passwords: P
   };
 
   const template: MenuItemConstructorOptions[] = isMac
-    ? [appMenu, editMenu, browseMenu, bookmarksMenu, passwordsMenu, viewMenu, windowMenu]
-    : [editMenu, browseMenu, bookmarksMenu, passwordsMenu, viewMenu, windowMenu];
+    ? [appMenu, editMenu, browseMenu, historyMenu, bookmarksMenu, passwordsMenu, viewMenu, windowMenu]
+    : [editMenu, browseMenu, historyMenu, bookmarksMenu, passwordsMenu, viewMenu, windowMenu];
 
   return Menu.buildFromTemplate(template);
 }
@@ -516,6 +570,17 @@ function registerIpc(bookmarks: BookmarkStore, passwords: PasswordStore): void {
     const bookmarked = await bookmarks.toggle(url, typeof title === 'string' ? title : '');
     refreshApplicationMenu();
     return bookmarked;
+  });
+
+  ipcMain.handle('sync-history', (event, entries: unknown) => {
+    if (event.sender.id !== mainWindow?.webContents.id) return;
+    recentHistory = sanitizeHistoryEntries(entries);
+    refreshApplicationMenu();
+  });
+
+  ipcMain.handle('clear-history', async (event) => {
+    if (event.sender.id !== mainWindow?.webContents.id || !mainWindow) return false;
+    return confirmAndClearHistory(mainWindow);
   });
 
   ipcMain.handle('list-password-matches', (event, url: unknown) => {

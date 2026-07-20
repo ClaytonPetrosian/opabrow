@@ -133,6 +133,21 @@ body {
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.38);
 }
 
+.history-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(620px, calc(100vh - 48px));
+  padding: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  background: rgba(30, 33, 38, 0.96);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.38);
+  color: #fff;
+  -webkit-app-region: no-drag;
+}
+
 .dialog-heading,
 .opacity-control {
   display: flex;
@@ -142,6 +157,39 @@ body {
 .dialog-heading {
   justify-content: space-between;
   margin-bottom: 18px;
+}
+
+.history-heading-title,
+.history-dialog-actions {
+  display: flex;
+  align-items: center;
+}
+
+.history-heading-title {
+  gap: 7px;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.history-dialog-actions {
+  gap: 4px;
+}
+
+.dialog-icon-button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  place-items: center;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+}
+
+.dialog-icon-button:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 .dialog-heading h2 {
@@ -170,6 +218,104 @@ body {
 
 .opacity-control {
   gap: 14px;
+}
+
+.history-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.history-search:focus-within {
+  border-color: rgba(96, 165, 250, 0.72);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.history-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.history-search input::placeholder {
+  color: rgba(255, 255, 255, 0.46);
+}
+
+.history-list {
+  min-height: 96px;
+  margin-top: 10px;
+  overflow: auto;
+}
+
+.history-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.history-entry:hover,
+.history-entry:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+  outline: none;
+}
+
+.history-entry-main {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+}
+
+.history-entry-title,
+.history-entry-url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-entry-title {
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 13px;
+}
+
+.history-entry-url,
+.history-entry time {
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 11px;
+}
+
+.history-entry time {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.history-empty {
+  padding: 30px 10px;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 13px;
+  text-align: center;
 }
 
 .opacity-slider {

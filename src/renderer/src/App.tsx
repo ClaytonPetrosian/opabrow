@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { Minus, Pin, X } from 'lucide-react';
+import { Clock3, Minus, Pin, Search, Trash2, X } from 'lucide-react';
 
 const DEFAULT_HOME_URL = 'https://github.com/ClaytonPetrosian/opabrow';
 const DESKTOP_USER_AGENT =
@@ -132,6 +132,20 @@ function formatHistoryUrl(url: string): string {
   }
 }
 
+function formatHistoryTime(visitedAt: number): string {
+  const date = new Date(visitedAt);
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+
+  if (sameDay) {
+    return new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit' }).format(date);
+  }
+  if (date.toDateString() === yesterday.toDateString()) return '昨天';
+  return new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(date);
+}
+
 function App() {
   const [homeUrl, setHomeUrl] = useState(readHomeUrl);
   const [url, setUrl] = useState(readHomeUrl);
@@ -141,6 +155,8 @@ function App() {
   const [onTop, setOnTop] = useState(false);
   const [mobileMode, setMobileMode] = useState(false);
   const [showOpacityDialog, setShowOpacityDialog] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyQuery, setHistoryQuery] = useState('');
   const [titlebarVisible, setTitlebarVisible] = useState(false);
   const [addressBarFocused, setAddressBarFocused] = useState(false);
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>(readHistory);
@@ -153,6 +169,7 @@ function App() {
   const webviewContainerRef = useRef<HTMLDivElement>(null);
   const quickInputRef = useRef<HTMLInputElement>(null);
   const addressInputRef = useRef<HTMLInputElement>(null);
+  const historyInputRef = useRef<HTMLInputElement>(null);
   const homeUrlRef = useRef(homeUrl);
 
   const loadInWebview = (targetUrl: string) => {
@@ -187,7 +204,15 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(historyEntries));
+    void window.opabrow.syncHistory(historyEntries).catch((error) => {
+      console.warn('history menu sync failed:', error);
+    });
   }, [historyEntries]);
+
+  useEffect(() => {
+    if (!showHistory) return;
+    window.setTimeout(() => historyInputRef.current?.focus(), 0);
+  }, [showHistory]);
 
   useEffect(() => {
     homeUrlRef.current = homeUrl;
@@ -378,6 +403,18 @@ function App() {
         case 'show_opacity_dialog':
           setShowOpacityDialog(true);
           break;
+        case 'show_history':
+          setHistoryQuery('');
+          setShowHistory(true);
+          break;
+        case 'history_open':
+          if (typeof value === 'string') goUrl(value);
+          break;
+        case 'history_clear':
+          setHistoryEntries([]);
+          setHistoryQuery('');
+          setShowHistory(false);
+          break;
         case 'opacity_inc':
           setOpacity((o) => Math.min(1, Math.round((o + 0.1) * 100) / 100));
           break;
@@ -392,18 +429,19 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ESC 关闭 quick bar
+  // ESC 关闭临时面板
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (passwordMatches) setPasswordMatches(null);
+        else if (showHistory) setShowHistory(false);
         else if (showOpacityDialog) setShowOpacityDialog(false);
         else if (showQuickBar) setShowQuickBar(false);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [showOpacityDialog, showQuickBar]);
+  }, [passwordMatches, showHistory, showOpacityDialog, showQuickBar]);
 
   // 监听 main 进程发来的 "iframe 跳转" 请求
   useEffect(() => {
@@ -524,6 +562,7 @@ function App() {
     setUrl(next);
     setCurrentUrl(next);
     setShowQuickBar(false);
+    setShowHistory(false);
     setAddressBarFocused(false);
     setActiveSuggestionIndex(-1);
     addressInputRef.current?.blur();
@@ -671,6 +710,13 @@ function App() {
         )
         .slice(0, ADDRESS_SUGGESTION_LIMIT)
     : [];
+  const historySearch = historyQuery.trim().toLowerCase();
+  const visibleHistory = historyEntries.filter(
+    (entry) =>
+      !historySearch ||
+      entry.title.toLowerCase().includes(historySearch) ||
+      entry.url.toLowerCase().includes(historySearch)
+  );
 
   return (
     <div className="app">
@@ -744,6 +790,84 @@ function App() {
                 onChange={(event) => setOpacity(parseFloat(event.target.value))}
               />
               <output>{Math.round(opacity * 100)}%</output>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {showHistory && (
+        <div
+          className="dialog-backdrop"
+          role="presentation"
+          onMouseDown={() => setShowHistory(false)}
+        >
+          <section
+            className="history-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="history-dialog-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="dialog-heading">
+              <div className="history-heading-title">
+                <Clock3 size={16} aria-hidden="true" />
+                <h2 id="history-dialog-title">历史记录</h2>
+              </div>
+              <div className="history-dialog-actions">
+                {historyEntries.length > 0 && (
+                  <button
+                    type="button"
+                    className="dialog-icon-button"
+                    aria-label="清空全部历史记录"
+                    title="清空全部历史记录"
+                    onClick={() => void window.opabrow.clearHistory()}
+                  >
+                    <Trash2 size={15} aria-hidden="true" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="dialog-close"
+                  aria-label="关闭"
+                  title="关闭 (ESC)"
+                  onClick={() => setShowHistory(false)}
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <label className="history-search">
+              <Search size={15} aria-hidden="true" />
+              <input
+                ref={historyInputRef}
+                type="search"
+                value={historyQuery}
+                onChange={(event) => setHistoryQuery(event.target.value)}
+                placeholder="搜索历史记录"
+                aria-label="搜索历史记录"
+                spellCheck={false}
+              />
+            </label>
+            <div className="history-list">
+              {visibleHistory.length > 0 ? (
+                visibleHistory.map((entry) => (
+                  <button
+                    key={entry.url}
+                    type="button"
+                    className="history-entry"
+                    title={entry.url}
+                    onClick={() => goUrl(entry.url)}
+                  >
+                    <span className="history-entry-main">
+                      <span className="history-entry-title">{entry.title}</span>
+                      <span className="history-entry-url">{formatHistoryUrl(entry.url)}</span>
+                    </span>
+                    <time dateTime={new Date(entry.visitedAt).toISOString()}>{formatHistoryTime(entry.visitedAt)}</time>
+                  </button>
+                ))
+              ) : (
+                <p className="history-empty">{historyEntries.length === 0 ? '还没有历史记录' : '没有匹配的历史记录'}</p>
+              )}
             </div>
           </section>
         </div>
