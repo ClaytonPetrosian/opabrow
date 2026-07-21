@@ -43,6 +43,18 @@
 - Windows x64（`.exe` 安装器）
 - Linux x64（`.AppImage`）
 
+### macOS 安装说明
+
+当前的 macOS 构建未使用 Apple Developer ID 签名。首次打开应用时，macOS Gatekeeper 可能会提示 **"opabrow"已损坏，无法打开。你应该将它移到废纸篓。**
+
+这是 Gatekeeper 对从网络下载的未签名应用的常规行为，文件本身并没有损坏。将 opabrow 拖入"应用程序"文件夹后，移除隔离属性：
+
+```bash
+xattr -cr /Applications/opabrow.app
+```
+
+然后即可正常启动 opabrow。我们正在为后续版本加入签名与公证。
+
 ## 快速开始
 
 ### 环境要求

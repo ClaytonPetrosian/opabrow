@@ -1,6 +1,6 @@
 {
   "name": "opabrow",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "opabrow - 透明浮层浏览器",
   "main": "./out/main/index.js",
   "author": "opabrow contributors",
