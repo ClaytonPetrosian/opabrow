@@ -332,7 +332,24 @@ function installDownloadTracking(): void {
   });
 }
 
+// 菜单重建: Menu.buildFromTemplate 会序列化整棵树跨进程发送给 cocoa,
+// 包含全部书签/历史/下载子菜单。频繁触发(如下载 progress 每秒数次、
+// SPA 页面 did-navigate 触发 history sync)会让主进程卡顿。
+// 用 200ms debounce 合并高频调用。
+let refreshMenuTimer: NodeJS.Timeout | null = null;
 function refreshApplicationMenu(): void {
+  if (refreshMenuTimer) return;
+  refreshMenuTimer = setTimeout(() => {
+    refreshMenuTimer = null;
+    refreshApplicationMenuNow();
+  }, 200);
+}
+
+function refreshApplicationMenuNow(): void {
+  if (refreshMenuTimer) {
+    clearTimeout(refreshMenuTimer);
+    refreshMenuTimer = null;
+  }
   if (!mainWindow || mainWindow.isDestroyed() || !bookmarkStore || !passwordStore) return;
   Menu.setApplicationMenu(buildAppMenu(mainWindow, bookmarkStore, passwordStore));
 }
@@ -518,7 +535,7 @@ function buildAppMenu(win: BrowserWindow, bookmarks: BookmarkStore, passwords: P
             });
             if (result.response !== 1) return;
             await bookmarks.clear();
-            refreshApplicationMenu();
+            refreshApplicationMenuNow();
           })().catch((error) => console.warn('Could not clear bookmarks:', error));
         }
       }
@@ -595,7 +612,7 @@ function buildAppMenu(win: BrowserWindow, bookmarks: BookmarkStore, passwords: P
             if (confirmation.response !== 1) return;
 
             const result = await passwords.importChromeCsv(selection.filePaths[0]);
-            refreshApplicationMenu();
+            refreshApplicationMenuNow();
             const changes = [`新增 ${result.added} 条`, `更新 ${result.updated} 条`];
             if (result.rejected > 0) changes.push(`跳过 ${result.rejected} 条无效记录`);
             await dialog.showMessageBox(win, {
@@ -628,7 +645,7 @@ function buildAppMenu(win: BrowserWindow, bookmarks: BookmarkStore, passwords: P
             });
             if (result.response !== 1) return;
             await passwords.clear();
-            refreshApplicationMenu();
+            refreshApplicationMenuNow();
           })().catch((error) => console.warn('Could not clear passwords:', error));
         }
       }
@@ -777,7 +794,7 @@ function registerIpc(bookmarks: BookmarkStore, passwords: PasswordStore): void {
     if (typeof url !== 'string') throw new Error('Invalid bookmark URL.');
 
     const bookmarked = await bookmarks.toggle(url, typeof title === 'string' ? title : '');
-    refreshApplicationMenu();
+    refreshApplicationMenuNow();
     return bookmarked;
   });
 
