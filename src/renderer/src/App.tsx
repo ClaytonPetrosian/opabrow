@@ -284,11 +284,17 @@ function App() {
     }).catch((error) => console.warn('session save failed:', error));
   }, [currentUrl, mobileMode, onTop, opacity, sessionReady]);
 
+  // history 写入 debounce: SPA 上 did-navigate-in-page (锚点变更) 会高频触发
+  // recordHistory,每次都 JSON.stringify + localStorage.setItem + IPC 同步会让
+  // renderer 主线程卡顿。合并到 400ms 后一次性写入,用户感知不到延迟。
   useEffect(() => {
-    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(historyEntries));
-    void window.opabrow.syncHistory(historyEntries).catch((error) => {
-      console.warn('history menu sync failed:', error);
-    });
+    const timer = window.setTimeout(() => {
+      localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(historyEntries));
+      void window.opabrow.syncHistory(historyEntries).catch((error) => {
+        console.warn('history menu sync failed:', error);
+      });
+    }, 400);
+    return () => window.clearTimeout(timer);
   }, [historyEntries]);
 
   useEffect(() => {
