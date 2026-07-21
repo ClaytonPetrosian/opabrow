@@ -8,6 +8,7 @@ describe('session sanitization', () => {
         url: 'https://example.com',
         opacity: 1.5,
         alwaysOnTop: true,
+        clickThrough: false,
         mobileMode: true,
         bounds: { x: 10, y: 20, width: 640, height: 480 },
         downloads: [{
@@ -25,6 +26,7 @@ describe('session sanitization', () => {
       url: 'https://example.com',
       opacity: 1,
       alwaysOnTop: true,
+      clickThrough: false,
       mobileMode: true,
       bounds: { x: 10, y: 20, width: 640, height: 480 },
       downloads: [{ id: 'download-1', state: 'completed' }]

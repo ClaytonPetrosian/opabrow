@@ -25,6 +25,7 @@ export type AppSession = {
   url: string | null;
   opacity: number;
   alwaysOnTop: boolean;
+  clickThrough: boolean;
   mobileMode: boolean;
   bounds: WindowBounds | null;
   downloads: DownloadEntry[];
@@ -34,6 +35,7 @@ const DEFAULT_SESSION: AppSession = {
   url: null,
   opacity: 1,
   alwaysOnTop: false,
+  clickThrough: true,
   mobileMode: false,
   bounds: null,
   downloads: []
@@ -112,6 +114,7 @@ export function sanitizeSession(value: unknown): AppSession {
       ? Math.min(1, Math.max(0.1, session.opacity))
       : DEFAULT_SESSION.opacity,
     alwaysOnTop: session.alwaysOnTop === true,
+    clickThrough: session.clickThrough !== false,
     mobileMode: session.mobileMode === true,
     bounds: sanitizeBounds(session.bounds),
     // 进程重启时没有可继续复用的 DownloadItem，遗留中的任务应明确显示为失败。
@@ -128,6 +131,7 @@ export function sanitizeSessionPatch(value: unknown): Partial<AppSession> {
   if (isHttpUrl(patch.url)) next.url = patch.url;
   if (typeof patch.opacity === 'number' && Number.isFinite(patch.opacity)) next.opacity = Math.min(1, Math.max(0.1, patch.opacity));
   if (typeof patch.alwaysOnTop === 'boolean') next.alwaysOnTop = patch.alwaysOnTop;
+  if (typeof patch.clickThrough === 'boolean') next.clickThrough = patch.clickThrough;
   if (typeof patch.mobileMode === 'boolean') next.mobileMode = patch.mobileMode;
   return next;
 }

@@ -20,6 +20,7 @@ let bookmarkStore: BookmarkStore | null = null;
 let passwordStore: PasswordStore | null = null;
 let sessionStore: SessionStore | null = null;
 let mobileModeEnabled = false;
+let clickThroughEnabled = true;
 let ipcHandlersRegistered = false;
 let recentHistory: HistoryEntry[] = [];
 let recentDownloads: DownloadEntry[] = [];
@@ -80,6 +81,7 @@ function createMainWindow(sessionState: AppSession): BrowserWindow {
   // 自定义 UA
   win.webContents.setUserAgent(CHROME_UA);
   win.setAlwaysOnTop(sessionState.alwaysOnTop, sessionState.alwaysOnTop ? 'floating' : 'normal');
+  applyClickThrough(win);
 
   // 加载 dev / prod URL
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
@@ -119,6 +121,11 @@ function createMainWindow(sessionState: AppSession): BrowserWindow {
   installWindowSessionTracking(win);
 
   return win;
+}
+
+function applyClickThrough(win = mainWindow): void {
+  if (!win || win.isDestroyed()) return;
+  win.setIgnoreMouseEvents(win.isAlwaysOnTop() && clickThroughEnabled, { forward: true });
 }
 
 function installWindowSessionTracking(win: BrowserWindow): void {
@@ -596,6 +603,17 @@ function buildAppMenu(win: BrowserWindow, bookmarks: BookmarkStore, passwords: P
         accelerator: 'CmdOrCtrl+T',
         click: () => win.webContents.send('menu-action', 'ontop_toggle')
       },
+      {
+        label: '置顶时点击穿透',
+        type: 'checkbox',
+        enabled: win.isAlwaysOnTop(),
+        checked: clickThroughEnabled,
+        click: (menuItem) => {
+          clickThroughEnabled = menuItem.checked;
+          sessionStore?.update({ clickThrough: clickThroughEnabled });
+          applyClickThrough(win);
+        }
+      },
       { type: 'separator' },
       {
         label: '手机模式访问网页',
@@ -668,6 +686,8 @@ function registerIpc(bookmarks: BookmarkStore, passwords: PasswordStore): void {
   ipcMain.handle('set-always-on-top', (_e, onTop: boolean) => {
     mainWindow?.setAlwaysOnTop(onTop, onTop ? 'floating' : 'normal');
     sessionStore?.update({ alwaysOnTop: onTop === true });
+    applyClickThrough();
+    refreshApplicationMenu();
     return onTop;
   });
 
@@ -779,6 +799,7 @@ app.whenReady().then(async () => {
   await sessionStore.load();
   const sessionState = sessionStore.getSnapshot();
   mobileModeEnabled = sessionState.mobileMode;
+  clickThroughEnabled = sessionState.clickThrough;
   recentDownloads = sessionState.downloads;
   installDownloadTracking();
 
