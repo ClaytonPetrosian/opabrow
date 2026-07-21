@@ -156,9 +156,15 @@ function createMainWindow(sessionState: AppSession): BrowserWindow {
   return win;
 }
 
-function applyClickThrough(win = mainWindow): void {
+// 控制窗口鼠标穿透。
+// - 置顶 + clickThroughEnabled 开启时,鼠标事件穿透到下方应用
+// - forceDisable=true 临时关掉穿透(用于鼠标进入标题栏区域时让按钮可点击)
+// 之所以需要 forceDisable: setIgnoreMouseEvents 是窗口级的,无法按区域控制,
+// 只能动态切换整个窗口的穿透状态。
+function applyClickThrough(win = mainWindow, forceDisable = false): void {
   if (!win || win.isDestroyed()) return;
-  win.setIgnoreMouseEvents(win.isAlwaysOnTop() && clickThroughEnabled, { forward: true });
+  const shouldIgnore = win.isAlwaysOnTop() && clickThroughEnabled && !forceDisable;
+  win.setIgnoreMouseEvents(shouldIgnore, { forward: true });
 }
 
 function installWindowSessionTracking(win: BrowserWindow): void {
@@ -208,6 +214,9 @@ function installTitlebarHoverTracking(win: BrowserWindow): void {
     if (visible === lastVisible) return;
     lastVisible = visible;
     win.webContents.send('titlebar-visibility', visible);
+    // 鼠标进入标题栏区域时,临时关掉窗口穿透,让标题栏按钮和拖动区可交互;
+    // 离开时恢复穿透状态。这样置顶+穿透模式下标题栏依然可用。
+    applyClickThrough(win, visible);
   };
 
   const start = (): void => {
@@ -221,6 +230,8 @@ function installTitlebarHoverTracking(win: BrowserWindow): void {
     // 停止时把标题栏隐藏,避免残留
     if (!win.isDestroyed()) win.webContents.send('titlebar-visibility', false);
     lastVisible = null;
+    // 恢复窗口穿透状态(非置顶模式下 applyClickThrough 会关掉穿透)
+    applyClickThrough(win);
   };
 
   // 根据置顶状态动态启停
