@@ -51,6 +51,10 @@ installChromiumPerformanceSwitches();
 // 关键:webview 标签内的 <a target="_blank"> 链接会创建新的 BrowserWindow
 // setWindowOpenHandler 只对 BrowserWindow 主 webContents 生效,
 // 但通过 app.on('web-contents-created') 可以拦截所有 webContents(包括 webview guest)
+//
+// 同时在这里做安全策略: 阻止 navigation 到非 http(s)/file: 协议。
+// 之前有两处 web-contents-created 监听,每个都会给同一 contents 绑
+// will-navigate,导致事件被处理两次。合并到一处。
 app.on('web-contents-created', (_event, contents) => {
   contents.setWindowOpenHandler((details) => {
     if (is.dev) {
@@ -61,9 +65,14 @@ app.on('web-contents-created', (_event, contents) => {
     contents.loadURL(details.url);
     return { action: 'deny' };
   });
-  contents.on('will-navigate', (_event, url, isInPlace, isMainFrame) => {
+  contents.on('will-navigate', (event, url, isInPlace, isMainFrame) => {
     if (is.dev) {
       console.log('[opabrow] will-navigate:', url, 'isInPlace=', isInPlace, 'isMainFrame=', isMainFrame, 'wc=', contents.id);
+    }
+    // 安全: 阻止 navigation 到非 http(s)/file: 协议
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:' && parsed.protocol !== 'file:') {
+      event.preventDefault();
     }
   });
 });
@@ -894,14 +903,4 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
-});
-
-// 安全:阻止 navigation 到非 http(s) 协议
-app.on('web-contents-created', (_, contents) => {
-  contents.on('will-navigate', (event, navigationUrl) => {
-    const parsed = new URL(navigationUrl);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:' && parsed.protocol !== 'file:') {
-      event.preventDefault();
-    }
-  });
 });
