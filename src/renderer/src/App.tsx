@@ -180,6 +180,8 @@ function App() {
   const [findResult, setFindResult] = useState({ matches: 0, activeMatchOrdinal: 0 });
   const [historyQuery, setHistoryQuery] = useState('');
   const [titlebarVisible, setTitlebarVisible] = useState(false);
+  const [titlebarHoveredByDom, setTitlebarHoveredByDom] = useState(false);
+  const [titlebarHoveredByMain, setTitlebarHoveredByMain] = useState<boolean | null>(null);
   const [addressBarFocused, setAddressBarFocused] = useState(false);
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>(readHistory);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
@@ -198,6 +200,22 @@ function App() {
   const homeUrlRef = useRef(homeUrl);
   const findQueryRef = useRef(findQuery);
   const mobileModeRef = useRef(mobileMode);
+
+  // 标题栏可见性合并:
+  // - 置顶模式: 由 main 进程屏幕坐标轮询决定 (titlebarHoveredByMain)
+  // - 非置顶: 由 DOM mouseenter/leave 决定 (titlebarHoveredByDom)
+  // addressBarFocused 时强制可见。
+  useEffect(() => {
+    if (addressBarFocused) {
+      setTitlebarVisible(true);
+      return;
+    }
+    if (onTop) {
+      setTitlebarVisible(titlebarHoveredByMain === true);
+    } else {
+      setTitlebarVisible(titlebarHoveredByDom);
+    }
+  }, [addressBarFocused, onTop, titlebarHoveredByMain, titlebarHoveredByDom]);
 
   const loadInWebview = (targetUrl: string) => {
     const wv = webviewRef.current;
@@ -583,24 +601,25 @@ function App() {
     return off;
   }, []);
 
-  // 标题栏由 main process 通过屏幕坐标判断 hover,renderer 只负责动画和按钮状态。
+  // 标题栏显示控制:
+  // - 非置顶模式: webview DOM mousemove 能正常触发,用 onMouseEnter/Leave 自己管
+  // - 置顶 + 点击穿透模式: setIgnoreMouseEvents 让 DOM 收不到 mousemove,
+  //   由 main process 通过屏幕坐标轮询后发 titlebar-visibility IPC 接管
   useEffect(() => {
     let hideTimer: number | null = null;
     const off = window.opabrow.onTitlebarVisibility((visible) => {
+      setTitlebarHoveredByMain(visible);
       if (hideTimer !== null) {
         window.clearTimeout(hideTimer);
         hideTimer = null;
       }
 
-      if (visible) {
-        setTitlebarVisible(true);
-        return;
+      if (!visible) {
+        hideTimer = window.setTimeout(() => {
+          setTitlebarHoveredByMain(false);
+          hideTimer = null;
+        }, 280);
       }
-
-      hideTimer = window.setTimeout(() => {
-        setTitlebarVisible(false);
-        hideTimer = null;
-      }, 280);
     });
 
     return () => {
@@ -1181,6 +1200,8 @@ function App() {
       <div
         className={`titlebar ${titlebarVisible || addressBarFocused ? 'visible' : ''}`}
         title="拖动窗口"
+        onMouseEnter={() => setTitlebarHoveredByDom(true)}
+        onMouseLeave={() => setTitlebarHoveredByDom(false)}
         onMouseDown={(e) => {
           e.preventDefault();
           window.opabrow.startDrag();

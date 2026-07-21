@@ -174,8 +174,12 @@ function installWindowSessionTracking(win: BrowserWindow): void {
 }
 
 // 标题栏区域独立占据窗口顶部 32px,通过屏幕坐标检测 hover,不依赖 webview 的鼠标事件。
+// 轮询仅在窗口置顶 + 点击穿透时启动 —— 这是唯一需要主进程帮忙检测的场景。
+// 非置顶模式下 webview 的 DOM mousemove 能正常触发,renderer 自己处理 hover 即可,
+// 此时 50ms setInterval 纯属空转,会持续唤醒主进程事件循环。
 function installTitlebarHoverTracking(win: BrowserWindow): void {
   let lastVisible: boolean | null = null;
+  let timer: NodeJS.Timeout | null = null;
 
   const update = (): void => {
     if (win.isDestroyed()) return;
@@ -193,12 +197,41 @@ function installTitlebarHoverTracking(win: BrowserWindow): void {
     win.webContents.send('titlebar-visibility', visible);
   };
 
-  const timer = setInterval(update, 50);
+  const start = (): void => {
+    if (timer) return;
+    timer = setInterval(update, 80);
+  };
+  const stop = (): void => {
+    if (!timer) return;
+    clearInterval(timer);
+    timer = null;
+    // 停止时把标题栏隐藏,避免残留
+    if (!win.isDestroyed()) win.webContents.send('titlebar-visibility', false);
+    lastVisible = null;
+  };
+
+  // 根据置顶状态动态启停
+  const sync = (): void => {
+    if (win.isDestroyed()) return;
+    if (win.isAlwaysOnTop()) start();
+    else stop();
+  };
+
+  win.on('always-on-top-changed', () => {
+    lastVisible = null;
+    sync();
+  });
   win.webContents.on('did-finish-load', () => {
     lastVisible = null;
-    update();
+    sync();
+    if (timer) update();
   });
-  win.once('closed', () => clearInterval(timer));
+  win.once('closed', () => {
+    stop();
+  });
+
+  // 初始状态
+  sync();
 }
 
 // ---------- macOS 顶部菜单栏 ----------
