@@ -27,6 +27,26 @@ let recentDownloads: DownloadEntry[] = [];
 const TITLEBAR_HEIGHT = 32;
 const DOWNLOAD_LIMIT = 30;
 
+// ---------- Chromium 性能开关 ----------
+// 必须在 app.whenReady() 之前调用。Electron 默认关闭了 Chrome 的部分加速特性,
+// 这里手动打开,缩小与原生 Chrome 的性能差距。
+function installChromiumPerformanceSwitches(): void {
+  // 1. 忽略 GPU 黑名单 —— 部分 Mac 机型会被 Chromium 列入 blocklist 而回退到软件渲染,
+  //    软件渲染下透明窗口合成会显著拖慢主线程。
+  app.commandLine.appendSwitch('ignore-gpu-blocklist');
+  // 2. GPU 栅格化 —— 让图块栅格化走 GPU 而不是 CPU。
+  app.commandLine.appendSwitch('enable-gpu-rasterization');
+  // 3. 零拷贝光栅化 —— 减少光栅化结果到合成器的内存拷贝。
+  app.commandLine.appendSwitch('enable-zero-copy');
+  // 4. Back/Forward Cache —— 前进后退时不重新加载页面,直接复用之前冻结的渲染进程。
+  //    B 站这种 SPA 来回切会快非常多。
+  app.commandLine.appendSwitch('enable-features', 'BackForwardCache');
+  // 5. 关闭进程外光栅化防御性回退,保持上述开关稳定生效。
+  app.commandLine.appendSwitch('disable-features', 'OutOfProcessRasterization');
+}
+
+installChromiumPerformanceSwitches();
+
 // ---------- 全局拦截所有 webContents 的新窗口请求 ----------
 // 关键:webview 标签内的 <a target="_blank"> 链接会创建新的 BrowserWindow
 // setWindowOpenHandler 只对 BrowserWindow 主 webContents 生效,
