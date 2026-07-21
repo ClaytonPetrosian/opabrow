@@ -91,6 +91,8 @@ Press `Cmd+F` to search the current page. `Cmd+G` and `Cmd+Shift+G` move through
 
 opabrow restores the latest page, window position and size, opacity, always-on-top setting, and mobile mode after relaunch. Downloads go to the standard Downloads folder. Open **Downloads** or press `Cmd+Shift+J` to follow progress, see failures, and reveal completed files in Finder. Recent download state stays local to this Mac.
 
+When the window is always on top, click-through is enabled by default: pointer clicks and scrolling go to the application below. Turn it off from **View > Click through when always on top** whenever you need to interact with the floating page.
+
 ### Bookmarks and browser import
 
 The macOS **Bookmarks** menu keeps bookmarks out of the browsing surface. Press `Cmd+D` to add or remove the current page, then open nested folders directly from the menu. Import bookmarks from local Chrome or Safari profiles, or choose a standard exported HTML bookmark file. Bookmark data stays on this Mac in opabrow's application data folder.

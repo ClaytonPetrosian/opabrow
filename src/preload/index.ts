@@ -57,6 +57,7 @@ export type SavedSession = {
   url: string | null;
   opacity: number;
   alwaysOnTop: boolean;
+  clickThrough?: boolean;
   mobileMode: boolean;
 };
 
