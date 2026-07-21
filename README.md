@@ -45,17 +45,11 @@ The title bar stays transparent until the pointer reaches the top edge. It has i
 - Windows x64 (`.exe` installer)
 - Linux x64 (`.AppImage`)
 
-### macOS installation note
+### macOS installation
 
-The current macOS builds are not signed with an Apple Developer ID. When you open the app for the first time, macOS Gatekeeper may show **"opabrow is damaged and can't be opened. You should move it to the Trash."**
+Starting with the next signed macOS release, packages are signed with a Developer ID and notarized by Apple. Open the downloaded DMG, drag **opabrow** to **Applications**, then launch it normally. No Terminal command is required.
 
-This is the standard Gatekeeper behavior for unsigned apps downloaded from the internet, not actual file corruption. After dragging opabrow to your Applications folder, remove the quarantine attribute:
-
-```bash
-xattr -cr /Applications/opabrow.app
-```
-
-Then launch opabrow normally. We are working on signing and notarizing future releases.
+The existing `v0.3.0` macOS assets predate this release pipeline and will be replaced by a signed release.
 
 ## Get started
 

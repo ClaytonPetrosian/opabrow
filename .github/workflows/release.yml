@@ -49,18 +49,41 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify types
         run: pnpm typecheck
+      - name: Prepare signed macOS release
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          RELEASE_MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          RELEASE_MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          RELEASE_APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          RELEASE_APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          RELEASE_APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          if [[ -z "$RELEASE_MAC_CSC_LINK" || -z "$RELEASE_MAC_CSC_KEY_PASSWORD" ]]; then
+            echo "::error::macOS releases require a Developer ID Application certificate in MAC_CSC_LINK and its password in MAC_CSC_KEY_PASSWORD."
+            exit 1
+          fi
+
+          if [[ -z "$RELEASE_APPLE_API_KEY" || -z "$RELEASE_APPLE_API_KEY_ID" || -z "$RELEASE_APPLE_API_ISSUER" ]]; then
+            echo "::error::macOS releases require Apple notarization credentials: APPLE_API_KEY, APPLE_API_KEY_ID, and APPLE_API_ISSUER."
+            exit 1
+          fi
+
+          key_path="$RUNNER_TEMP/AuthKey_${RELEASE_APPLE_API_KEY_ID}.p8"
+          printf '%s' "$RELEASE_APPLE_API_KEY" > "$key_path"
+          chmod 600 "$key_path"
+
+          {
+            echo "APPLE_API_KEY=$key_path"
+            echo "APPLE_API_KEY_ID=$RELEASE_APPLE_API_KEY_ID"
+            echo "APPLE_API_ISSUER=$RELEASE_APPLE_API_ISSUER"
+          } >> "$GITHUB_ENV"
       - name: Package application
         shell: bash
         run: |
           if [[ -n "$RELEASE_MAC_CSC_LINK" ]]; then
             export CSC_LINK="$RELEASE_MAC_CSC_LINK"
             export CSC_KEY_PASSWORD="$RELEASE_MAC_CSC_KEY_PASSWORD"
-          fi
-
-          if [[ -n "$RELEASE_APPLE_ID" && -n "$RELEASE_APPLE_APP_SPECIFIC_PASSWORD" && -n "$RELEASE_APPLE_TEAM_ID" ]]; then
-            export APPLE_ID="$RELEASE_APPLE_ID"
-            export APPLE_APP_SPECIFIC_PASSWORD="$RELEASE_APPLE_APP_SPECIFIC_PASSWORD"
-            export APPLE_TEAM_ID="$RELEASE_APPLE_TEAM_ID"
           fi
 
           if [[ -n "$RELEASE_WIN_CSC_LINK" ]]; then
@@ -73,9 +96,6 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           RELEASE_MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           RELEASE_MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          RELEASE_APPLE_ID: ${{ secrets.APPLE_ID }}
-          RELEASE_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          RELEASE_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           RELEASE_WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           RELEASE_WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
       - uses: actions/upload-artifact@v4
