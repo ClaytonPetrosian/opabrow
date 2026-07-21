@@ -239,14 +239,21 @@ function createMainWindow(sessionState: AppSession): BrowserWindow {
 }
 
 // 控制窗口鼠标穿透。
-// - 置顶 + clickThroughEnabled 开启时,鼠标事件穿透到下方应用
+// - 置顶 + clickThroughEnabled 开启时,鼠标事件完全穿透到下方应用
 // - forceDisable=true 临时关掉穿透(用于鼠标进入标题栏区域时让按钮可点击)
 // 之所以需要 forceDisable: setIgnoreMouseEvents 是窗口级的,无法按区域控制,
 // 只能动态切换整个窗口的穿透状态。
+//
+// forward: false 的含义: 鼠标事件完全不转发给 webContents,
+// 网页收不到 mousemove/click,自然不会触发任何 hover 交互或点击。
+// 之前用 forward: true 会让网页继续接收 mousemove 触发 hover,不符合
+// "点击穿透"的预期(用户期望穿透模式下网页完全不响应)。
+// 副作用: renderer 的 DOM mousemove 也收不到,标题栏 hover 检测必须靠
+// 主进程屏幕坐标轮询(installTitlebarHoverTracking 已实现)。
 function applyClickThrough(win = mainWindow, forceDisable = false): void {
   if (!win || win.isDestroyed()) return;
   const shouldIgnore = win.isAlwaysOnTop() && clickThroughEnabled && !forceDisable;
-  win.setIgnoreMouseEvents(shouldIgnore, { forward: true });
+  win.setIgnoreMouseEvents(shouldIgnore, { forward: false });
 }
 
 function installWindowSessionTracking(win: BrowserWindow): void {
