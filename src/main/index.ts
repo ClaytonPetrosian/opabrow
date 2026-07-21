@@ -53,14 +53,18 @@ installChromiumPerformanceSwitches();
 // 但通过 app.on('web-contents-created') 可以拦截所有 webContents(包括 webview guest)
 app.on('web-contents-created', (_event, contents) => {
   contents.setWindowOpenHandler((details) => {
-    console.log('[opabrow] setWindowOpenHandler intercepted:', details.url, 'in wc', contents.id);
+    if (is.dev) {
+      console.log('[opabrow] setWindowOpenHandler intercepted:', details.url, 'in wc', contents.id);
+    }
     // 在当前 webContents 内直接 navigate —— 这样 history 累积,前进后退能用
     // 不能用 send IPC 通知 renderer 改 webview.src,那样会重置 history
     contents.loadURL(details.url);
     return { action: 'deny' };
   });
   contents.on('will-navigate', (_event, url, isInPlace, isMainFrame) => {
-    console.log('[opabrow] will-navigate:', url, 'isInPlace=', isInPlace, 'isMainFrame=', isMainFrame, 'wc=', contents.id);
+    if (is.dev) {
+      console.log('[opabrow] will-navigate:', url, 'isInPlace=', isInPlace, 'isMainFrame=', isMainFrame, 'wc=', contents.id);
+    }
   });
 });
 
