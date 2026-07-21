@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, shell, ipcMain, Menu, MenuItemConstructorOptions, screen, session } from 'electron';
+import { app, BrowserWindow, dialog, shell, ipcMain, Menu, MenuItemConstructorOptions, screen, session, WebContentsView } from 'electron';
 import { basename, extname, join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -26,6 +26,88 @@ let recentHistory: HistoryEntry[] = [];
 let recentDownloads: DownloadEntry[] = [];
 const TITLEBAR_HEIGHT = 32;
 const DOWNLOAD_LIMIT = 30;
+
+// ---------- WebContentsView 管理 ----------
+// 取代 <webview> tag。WebContentsView 是 Electron 30+ 推荐方案,
+// 直接由 main 进程持有,无 guest view IPC 序列化开销。
+let webContentView: WebContentsView | null = null;
+// webview 区域(相对窗口左上角)。标题栏占顶部 32px,webview 占剩余区域。
+let webContentBounds = { x: 0, y: TITLEBAR_HEIGHT, width: 0, height: 0 };
+
+// macOS 现代 Chrome UA(避免 B 站"浏览器版本过低")
+const CHROME_UA =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36 opabrow/0.1';
+const MOBILE_UA =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+
+function syncWebContentBounds(): void {
+  if (!mainWindow || mainWindow.isDestroyed() || !webContentView) return;
+  const [winWidth, winHeight] = mainWindow.getContentSize();
+  webContentBounds = {
+    x: 0,
+    y: TITLEBAR_HEIGHT,
+    width: winWidth,
+    height: Math.max(0, winHeight - TITLEBAR_HEIGHT)
+  };
+  webContentView.setBounds(webContentBounds);
+}
+
+function createWebContentView(initialUrl: string): WebContentsView {
+  const view = new WebContentsView({
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: true,
+      backgroundThrottling: false
+    }
+  });
+
+  // 自定义 UA
+  view.webContents.setUserAgent(mobileModeEnabled ? MOBILE_UA : CHROME_UA);
+
+  // 拦截新窗口:在当前 webContents 内导航
+  view.webContents.setWindowOpenHandler((details) => {
+    if (is.dev) {
+      console.log('[opabrow] view setWindowOpenHandler:', details.url);
+    }
+    view.webContents.loadURL(details.url);
+    return { action: 'deny' };
+  });
+
+  // 事件转发给 renderer
+  const send = (channel: string, ...args: unknown[]): void => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(channel, ...args);
+    }
+  };
+
+  view.webContents.on('dom-ready', () => send('webview:dom-ready'));
+  view.webContents.on('did-navigate', (_e, url) => send('webview:did-navigate', url));
+  view.webContents.on('did-navigate-in-page', (_e, url) => send('webview:did-navigate-in-page', url));
+  view.webContents.on('page-title-updated', (_e, title) => send('webview:page-title-updated', title));
+  view.webContents.on('found-in-page', (_e, result) => send('webview:found-in-page', result));
+  view.webContents.on('did-finish-load', () => send('webview:did-finish-load'));
+
+  // 初始加载
+  if (initialUrl) {
+    void view.webContents.loadURL(initialUrl).catch((error) => {
+      console.warn('[opabrow] initial loadURL failed:', error);
+    });
+  }
+
+  return view;
+}
+
+function attachWebContentView(win: BrowserWindow, initialUrl: string): void {
+  if (webContentView) return;
+  webContentView = createWebContentView(initialUrl);
+  win.contentView.addChildView(webContentView);
+  syncWebContentBounds();
+  // 窗口尺寸变化时同步 view bounds
+  win.on('resize', () => syncWebContentBounds());
+}
 
 // ---------- Chromium 性能开关 ----------
 // 必须在 app.whenReady() 之前调用。Electron 默认关闭了 Chrome 的部分加速特性,
@@ -77,10 +159,6 @@ app.on('web-contents-created', (_event, contents) => {
   });
 });
 
-// macOS 现代 Chrome UA(避免 B 站"浏览器版本过低")
-const CHROME_UA =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36 opabrow/0.1';
-
 // ---------- 创建主窗口 ----------
 function createMainWindow(sessionState: AppSession): BrowserWindow {
   const bounds = sessionState.bounds;
@@ -89,13 +167,18 @@ function createMainWindow(sessionState: AppSession): BrowserWindow {
     height: bounds?.height ?? 832,
     ...(bounds ? { x: bounds.x, y: bounds.y } : {}),
     show: true, // 立刻显示,免得 macOS 透明窗口被吞
-    transparent: true,
+    // 改用 macOS 原生 vibrancy 毛玻璃,替代 transparent: true + CSS backdrop-filter。
+    // vibrancy 走 CoreAnimation 原生合成路径,比 CSS backdrop-filter 便宜很多,
+    // 且不需要每帧重绘毛玻璃层。
+    transparent: false,
+    vibrancy: 'under-window',
+    visualEffectState: 'active',
     frame: false,
     titleBarStyle: 'hiddenInset', // macOS 隐藏标题栏
     trafficLightPosition: { x: -100, y: -100 }, // 把红绿黄按钮挪出可见区
     hasShadow: true,
     opacity: sessionState.opacity,
-    backgroundColor: '#00000000', // 完全透明
+    backgroundColor: '#00000000', // 让 vibrancy 透过 webview 透明区域
     movable: true, // 允许拖动
     resizable: true,
     center: true,
@@ -106,8 +189,7 @@ function createMainWindow(sessionState: AppSession): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: true,
-      backgroundThrottling: false,
-      webviewTag: true // 显式启用 <webview> tag
+      backgroundThrottling: false
     }
   });
 
@@ -875,6 +957,99 @@ function registerIpc(bookmarks: BookmarkStore, passwords: PasswordStore): void {
     if (typeof id !== 'string' || typeof url !== 'string') return null;
     return passwords.getForFill(id, url);
   });
+
+  registerWebContentIpc();
+}
+
+// ---------- WebContentsView IPC ----------
+// renderer 不再持有 webview 对象,所有操作通过 IPC 转发到 main。
+function registerWebContentIpc(): void {
+  // 加载 URL
+  ipcMain.handle('webview:load-url', (event, url: unknown) => {
+    if (event.sender.id !== mainWindow?.webContents.id || typeof url !== 'string') return false;
+    if (!webContentView) return false;
+    if (webContentView.webContents.getURL() === url) return true;
+    void webContentView.webContents.loadURL(url).catch((error) => {
+      console.warn('[opabrow] webview loadURL failed:', error);
+    });
+    return true;
+  });
+
+  // 重新加载
+  ipcMain.handle('webview:reload', (event) => {
+    if (event.sender.id !== mainWindow?.webContents.id || !webContentView) return;
+    try {
+      webContentView.webContents.reload();
+    } catch (error) {
+      console.warn('[opabrow] webview reload failed:', error);
+    }
+  });
+
+  // 后退 / 前进
+  ipcMain.handle('webview:go-back', (event) => {
+    if (event.sender.id !== mainWindow?.webContents.id || !webContentView) return;
+    try {
+      webContentView.webContents.goBack();
+    } catch (error) {
+      console.warn('[opabrow] webview goBack failed:', error);
+    }
+  });
+  ipcMain.handle('webview:go-forward', (event) => {
+    if (event.sender.id !== mainWindow?.webContents.id || !webContentView) return;
+    try {
+      webContentView.webContents.goForward();
+    } catch (error) {
+      console.warn('[opabrow] webview goForward failed:', error);
+    }
+  });
+
+  // 获取当前 URL / 标题
+  ipcMain.handle('webview:get-url', (event) => {
+    if (event.sender.id !== mainWindow?.webContents.id || !webContentView) return '';
+    return webContentView.webContents.getURL();
+  });
+  ipcMain.handle('webview:get-title', (event) => {
+    if (event.sender.id !== mainWindow?.webContents.id || !webContentView) return '';
+    return webContentView.webContents.getTitle();
+  });
+
+  // 设置 UA (mobile 模式切换)
+  ipcMain.handle('webview:set-user-agent', (event, userAgent: unknown) => {
+    if (event.sender.id !== mainWindow?.webContents.id || typeof userAgent !== 'string') return;
+    if (!webContentView) return;
+    webContentView.webContents.setUserAgent(userAgent);
+  });
+
+  // 页面内查找
+  ipcMain.handle('webview:find-in-page', (event, query: unknown, options: unknown) => {
+    if (event.sender.id !== mainWindow?.webContents.id || !webContentView) return;
+    if (typeof query !== 'string') return;
+    try {
+      webContentView.webContents.findInPage(query, (options as Electron.FindInPageOptions) ?? {});
+    } catch (error) {
+      console.warn('[opabrow] webview findInPage failed:', error);
+    }
+  });
+  ipcMain.handle('webview:stop-find-in-page', (event, action: unknown) => {
+    if (event.sender.id !== mainWindow?.webContents.id || !webContentView) return;
+    try {
+      webContentView.webContents.stopFindInPage((action as 'clearSelection' | 'keepSelection' | 'activateSelection') ?? 'clearSelection');
+    } catch (error) {
+      console.warn('[opabrow] webview stopFindInPage failed:', error);
+    }
+  });
+
+  // 执行 JS (用于密码填充、B 站网页全屏)
+  ipcMain.handle('webview:execute-javascript', async (event, script: unknown) => {
+    if (event.sender.id !== mainWindow?.webContents.id || typeof script !== 'string') return null;
+    if (!webContentView) return null;
+    try {
+      return await webContentView.webContents.executeJavaScript(script);
+    } catch (error) {
+      console.warn('[opabrow] webview executeJavaScript failed:', error);
+      return null;
+    }
+  });
 }
 
 // ---------- App 生命周期 ----------
@@ -898,6 +1073,8 @@ app.whenReady().then(async () => {
   installDownloadTracking();
 
   mainWindow = createMainWindow(sessionState);
+  // 初始 URL 从 session 读取,由 renderer 通过 IPC 调用 loadURL 控制
+  attachWebContentView(mainWindow, sessionState.url ?? '');
   registerIpc(bookmarkStore, passwordStore);
 
   refreshApplicationMenu();
@@ -905,6 +1082,7 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       mainWindow = createMainWindow(sessionStore?.getSnapshot() ?? sessionState);
+      attachWebContentView(mainWindow, sessionStore?.getSnapshot().url ?? '');
       refreshApplicationMenu();
     }
   });

@@ -190,9 +190,7 @@ function App() {
   const [passwordStatus, setPasswordStatus] = useState<string | null>(null);
   const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
   const [downloads, setDownloads] = useState<DownloadEntry[]>([]);
-  const webviewRef = useRef<Electron.WebviewTag | null>(null);
   const webviewReadyRef = useRef(false);
-  const webviewContainerRef = useRef<HTMLDivElement>(null);
   const quickInputRef = useRef<HTMLInputElement>(null);
   const addressInputRef = useRef<HTMLInputElement>(null);
   const historyInputRef = useRef<HTMLInputElement>(null);
@@ -200,6 +198,10 @@ function App() {
   const homeUrlRef = useRef(homeUrl);
   const findQueryRef = useRef(findQuery);
   const mobileModeRef = useRef(mobileMode);
+  const currentUrlRef = useRef(currentUrl);
+  useEffect(() => {
+    currentUrlRef.current = currentUrl;
+  }, [currentUrl]);
 
   // 标题栏可见性合并:
   // - 置顶模式: 由 main 进程屏幕坐标轮询决定 (titlebarHoveredByMain)
@@ -218,23 +220,9 @@ function App() {
   }, [addressBarFocused, onTop, titlebarHoveredByMain, titlebarHoveredByDom]);
 
   const loadInWebview = (targetUrl: string) => {
-    const wv = webviewRef.current;
-    if (!wv) return;
-
-    // dom-ready 之前调用 loadURL 会直接抛错;初始导航交给 src 属性。
-    if (!webviewReadyRef.current) {
-      wv.src = targetUrl;
-      return;
-    }
-
-    try {
-      if (wv.getURL() === targetUrl) return;
-      void wv.loadURL(targetUrl).catch((error) => {
-        console.warn('webview navigation failed:', error);
-      });
-    } catch (error) {
+    void window.opabrow.webview.loadURL(targetUrl).catch((error) => {
       console.warn('webview navigation failed:', error);
-    }
+    });
   };
 
   // 透明度变化 → main process
@@ -310,15 +298,13 @@ function App() {
   useEffect(() => {
     findQueryRef.current = findQuery;
     if (!showFind) return;
-    const webview = webviewRef.current;
-    if (!webview) return;
     const query = findQuery.trim();
     if (!query) {
-      webview.stopFindInPage('clearSelection');
+      void window.opabrow.webview.stopFindInPage('clearSelection');
       setFindResult({ matches: 0, activeMatchOrdinal: 0 });
       return;
     }
-    webview.findInPage(query, { forward: true, findNext: false, matchCase: false });
+    void window.opabrow.webview.findInPage(query, { forward: true, findNext: false, matchCase: false });
   }, [findQuery, showFind]);
 
   useEffect(() => {
@@ -330,146 +316,81 @@ function App() {
     mobileModeRef.current = mobileMode;
   }, [mobileMode]);
 
-  // 挂载 webview (动态创建,绕过 React 编译对 <webview> tag 的处理)
+  // 订阅 main 进程 WebContentsView 转发的事件。
+  // WebContentsView 由 main 进程持有,renderer 不再创建 <webview> DOM 元素,
+  // 所有事件通过 IPC 转发到这里。
   useEffect(() => {
-    const container = webviewContainerRef.current;
-    if (!container) return;
+    const offs: Array<() => void> = [];
 
-    const wv = document.createElement('webview') as Electron.WebviewTag;
-    // webview 尚未就绪时调用 setUserAgent 会让初始导航停在 about:blank。
-    // 首次加载改用声明式属性；切换手机模式时再在 dom-ready 后调用方法。
-    wv.setAttribute('useragent', DESKTOP_USER_AGENT);
-    wv.src = currentUrl;
-    wv.className = 'webview';
-    // webview 独占标题栏下方的网页区域,不进入顶部 32px 标题栏。
-    wv.style.cssText = 'border:0;display:flex;background:#fff;';
-    // 建议性阻止新窗口
-    wv.setAttribute('allowpopups', 'false');
-
-    // webview guest 不会可靠地响应 CSS 的 100% 高度,未显式设尺寸时会回落到 150px。
-    // 用容器的实际像素尺寸同步给它,保证窗口缩放后网页视口同步更新。
-    const resizeWebview = () => {
-      const { width, height } = container.getBoundingClientRect();
-      const pixelWidth = Math.floor(width);
-      const pixelHeight = Math.floor(height);
-      if (pixelWidth < 1 || pixelHeight < 1) return;
-      wv.style.width = `${pixelWidth}px`;
-      wv.style.height = `${pixelHeight}px`;
-      wv.setAttribute('width', String(pixelWidth));
-      wv.setAttribute('height', String(pixelHeight));
-    };
-    const resizeObserver = new ResizeObserver(resizeWebview);
-
-    // target=_blank 拦截在 main 进程的 app.on('web-contents-created') 里完成。
-    // renderer 只负责把实际导航结果同步回 quick bar。
-    const onDomReady = () => {
-      webviewReadyRef.current = true;
-      if (mobileModeRef.current) {
-        try {
-          wv.setUserAgent(MOBILE_USER_AGENT);
-          wv.reload();
-        } catch (error) {
-          console.warn('webview user agent restore failed:', error);
+    offs.push(
+      window.opabrow.webview.onDomReady(() => {
+        webviewReadyRef.current = true;
+        // 启动时若 mobile 模式开启,需切 UA 并 reload
+        if (mobileModeRef.current) {
+          void window.opabrow.webview.setUserAgent(MOBILE_USER_AGENT).then(() => {
+            void window.opabrow.webview.reload();
+          });
         }
-      }
-    };
-    wv.addEventListener('dom-ready', onDomReady);
+      })
+    );
 
-    const syncUrl = (e: Event) => {
-      const next = (e as unknown as { url?: string }).url;
+    const syncUrl = (next: string) => {
       if (!next) return;
       setCurrentUrl(next);
       setUrl(next);
       recordHistory(next);
     };
-    wv.addEventListener('did-navigate', syncUrl);
-    wv.addEventListener('did-navigate-in-page', syncUrl);
+    offs.push(window.opabrow.webview.onDidNavigate(syncUrl));
+    offs.push(window.opabrow.webview.onDidNavigateInPage(syncUrl));
 
-    const syncTitle = (e: Event) => {
-      const title = (e as unknown as { title?: string }).title;
-      const pageUrl = wv.getURL();
-      if (title && pageUrl) recordHistory(pageUrl, title);
-    };
-    wv.addEventListener('page-title-updated', syncTitle);
+    offs.push(
+      window.opabrow.webview.onPageTitleUpdated((title) => {
+        if (title) recordHistory(currentUrlRef.current, title);
+      })
+    );
 
-    const syncFindResult = (e: Event) => {
-      const result = (e as unknown as {
-        result?: { matches?: number; activeMatchOrdinal?: number; finalUpdate?: boolean };
-      }).result;
-      if (!result?.finalUpdate) return;
-      setFindResult({
-        matches: result.matches ?? 0,
-        activeMatchOrdinal: result.activeMatchOrdinal ?? 0
-      });
-    };
-    wv.addEventListener('found-in-page', syncFindResult);
+    offs.push(
+      window.opabrow.webview.onFoundInPage((result) => {
+        if (!result?.finalUpdate) return;
+        setFindResult({
+          matches: result.matches ?? 0,
+          activeMatchOrdinal: result.activeMatchOrdinal ?? 0
+        });
+      })
+    );
 
-    const enterBilibiliWebFullscreen = () => {
-      const pageUrl = wv.getURL();
-      if (!isBilibiliVideoUrl(pageUrl)) return;
-      void wv.executeJavaScript(BILIBILI_WEB_FULLSCREEN_SCRIPT).catch((error) => {
-        console.warn('Bilibili web fullscreen failed:', error);
-      });
-    };
-    wv.addEventListener('did-finish-load', enterBilibiliWebFullscreen);
-
-    // 兜底:new-window 事件也拦一次
-    wv.addEventListener('new-window', (e) => {
-      e.preventDefault();
-      const target = (e as unknown as { url?: string }).url;
-      if (target) {
-        try {
-          void wv.loadURL(target).catch((error) => {
-            console.warn('webview new-window navigation failed:', error);
-          });
-        } catch (error) {
-          console.warn('webview new-window navigation failed:', error);
-        }
-        setCurrentUrl(target);
-        setUrl(target);
-      }
-    });
-
-    // webview guest 在 appendChild 时读取初始尺寸;必须在挂载前就写入，
-    // 否则会永久沿用 Chromium 的默认 150px 高度。
-    requestAnimationFrame(resizeWebview);
-    resizeWebview();
-    container.appendChild(wv);
-    webviewRef.current = wv;
-    resizeObserver.observe(container);
+    offs.push(
+      window.opabrow.webview.onDidFinishLoad(() => {
+        if (!isBilibiliVideoUrl(currentUrlRef.current)) return;
+        void window.opabrow.webview.executeJavaScript(BILIBILI_WEB_FULLSCREEN_SCRIPT).catch((error) => {
+          console.warn('Bilibili web fullscreen failed:', error);
+        });
+      })
+    );
 
     return () => {
-      resizeObserver.disconnect();
-      wv.removeEventListener('dom-ready', onDomReady);
-      wv.removeEventListener('page-title-updated', syncTitle);
-      wv.removeEventListener('found-in-page', syncFindResult);
-      wv.removeEventListener('did-finish-load', enterBilibiliWebFullscreen);
-      wv.remove();
-      webviewRef.current = null;
-      webviewReadyRef.current = false;
+      for (const off of offs) off();
     };
     // 只挂载一次
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // URL 变化时 → 改 webview.src
+  // URL 变化时 → 通过 IPC 让 main 进程的 WebContentsView 加载
   useEffect(() => {
-    if (webviewRef.current) {
-      loadInWebview(currentUrl);
-    }
+    loadInWebview(currentUrl);
   }, [currentUrl]);
 
   // 手机模式通过切换 webview 的浏览器标识实现，并重新载入当前页面让网站按移动端返回内容。
   useEffect(() => {
-    const wv = webviewRef.current;
-    if (!wv || !sessionReady || !webviewReadyRef.current) return;
-
-    try {
-      wv.setUserAgent(mobileMode ? MOBILE_USER_AGENT : DESKTOP_USER_AGENT);
-      if (webviewReadyRef.current) wv.reload();
-    } catch (error) {
-      console.warn('webview user agent update failed:', error);
-    }
+    if (!sessionReady || !webviewReadyRef.current) return;
+    void window.opabrow.webview
+      .setUserAgent(mobileMode ? MOBILE_USER_AGENT : DESKTOP_USER_AGENT)
+      .then(() => {
+        void window.opabrow.webview.reload();
+      })
+      .catch((error) => {
+        console.warn('webview user agent update failed:', error);
+      });
   }, [mobileMode, sessionReady]);
 
   // 菜单事件订阅
@@ -499,7 +420,7 @@ function App() {
           goUrl(homeUrlRef.current);
           break;
         case 'set_home': {
-          const pageUrl = webviewRef.current?.getURL() || currentUrl;
+          const pageUrl = currentUrl;
           if (/^https?:\/\//i.test(pageUrl)) setHomeUrl(pageUrl);
           break;
         }
@@ -507,10 +428,10 @@ function App() {
           setHomeUrl(DEFAULT_HOME_URL);
           break;
         case 'bookmark_toggle': {
-          const webview = webviewRef.current;
-          const pageUrl = webview?.getURL() || currentUrl;
-          const pageTitle = webview?.getTitle() || pageUrl;
-          void window.opabrow.toggleBookmark({ url: pageUrl, title: pageTitle }).catch((error) => {
+          const pageUrl = currentUrl;
+          void window.opabrow.webview.getTitle().then((pageTitle) => {
+            return window.opabrow.toggleBookmark({ url: pageUrl, title: pageTitle || pageUrl });
+          }).catch((error) => {
             console.warn('bookmark toggle failed:', error);
           });
           break;
@@ -522,18 +443,10 @@ function App() {
           void requestPasswordFill();
           break;
         case 'go_back':
-          try {
-            webviewRef.current?.goBack();
-          } catch (e) {
-            console.warn('goBack failed:', e);
-          }
+          void window.opabrow.webview.goBack().catch((e) => console.warn('goBack failed:', e));
           break;
         case 'go_forward':
-          try {
-            webviewRef.current?.goForward();
-          } catch (e) {
-            console.warn('goForward failed:', e);
-          }
+          void window.opabrow.webview.goForward().catch((e) => console.warn('goForward failed:', e));
           break;
         case 'ontop_toggle':
           setOnTop((v) => !v);
@@ -648,21 +561,13 @@ function App() {
       // ⌘+[ 后退
       if (e.key === '[' && !e.shiftKey && !e.altKey) {
         e.preventDefault();
-        try {
-          webviewRef.current?.goBack();
-        } catch (err) {
-          console.warn('goBack failed:', err);
-        }
+        void window.opabrow.webview.goBack().catch((err) => console.warn('goBack failed:', err));
         return;
       }
       // ⌘+] 前进
       if (e.key === ']' && !e.shiftKey && !e.altKey) {
         e.preventDefault();
-        try {
-          webviewRef.current?.goForward();
-        } catch (err) {
-          console.warn('goForward failed:', err);
-        }
+        void window.opabrow.webview.goForward().catch((err) => console.warn('goForward failed:', err));
         return;
       }
       // ⌘R 刷新
@@ -746,11 +651,7 @@ function App() {
   }
 
   function reload() {
-    try {
-      webviewRef.current?.reload();
-    } catch (e) {
-      console.warn('reload failed:', e);
-    }
+    void window.opabrow.webview.reload().catch((e) => console.warn('reload failed:', e));
   }
 
   function openFind() {
@@ -759,7 +660,7 @@ function App() {
   }
 
   function closeFind() {
-    webviewRef.current?.stopFindInPage('clearSelection');
+    void window.opabrow.webview.stopFindInPage('clearSelection');
     setShowFind(false);
     setFindQuery('');
     setFindResult({ matches: 0, activeMatchOrdinal: 0 });
@@ -771,7 +672,7 @@ function App() {
       openFind();
       return;
     }
-    webviewRef.current?.findInPage(query, { forward, findNext: true, matchCase: false });
+    void window.opabrow.webview.findInPage(query, { forward, findNext: true, matchCase: false });
   }
 
   function showPasswordStatus(message: string) {
@@ -789,7 +690,7 @@ function App() {
   }
 
   async function requestPasswordFill() {
-    const pageUrl = webviewRef.current?.getURL() || currentUrl;
+    const pageUrl = currentUrl;
     const matches = await window.opabrow.listPasswordMatches(pageUrl);
     if (matches.length === 0) {
       showPasswordStatus('此 HTTPS 页面没有可用的已保存密码。');
@@ -813,15 +714,15 @@ function App() {
         return;
       }
 
-      const webview = webviewRef.current;
-      if (!webview || webview.getURL() !== pageUrl) {
+      // 填充过程中若页面已导航,放弃填充避免把密码写到错误页面
+      if (currentUrl !== pageUrl) {
         showPasswordStatus('页面已变化，请重新选择“填充当前页面”。');
         return;
       }
 
-      const result = (await webview.executeJavaScript(passwordFillScript(credential.username, credential.password))) as {
-        filled?: boolean;
-      };
+      const result = (await window.opabrow.webview.executeJavaScript(
+        passwordFillScript(credential.username, credential.password)
+      )) as { filled?: boolean } | null;
       showPasswordStatus(result?.filled ? '已填充当前页面的登录信息。' : '没有找到可填充的密码输入框。');
     } catch {
       showPasswordStatus('无法填充该页面，请确认 macOS 钥匙串可用。');
@@ -1351,8 +1252,8 @@ function App() {
         </div>
       </div>
 
-      {/* webview 容器:从标题栏下方开始,网页大小不受标题栏显隐影响。 */}
-      <div className="webview-container" ref={webviewContainerRef} />
+       {/* WebContentsView 由 main 进程持有,直接附加到窗口 contentView,
+           占据标题栏 (32px) 下方区域。renderer 这里不需要占位元素。 */}
       {passwordStatus && <div className="password-status" role="status">{passwordStatus}</div>}
       {downloadStatus && <div className="password-status" role="status">{downloadStatus}</div>}
     </div>

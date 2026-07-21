@@ -118,6 +118,68 @@ const api = {
     return (): void => {
       ipcRenderer.removeListener('download-update', handler);
     };
+  },
+
+  // ---------- WebContentsView 控制 ----------
+  // 取代 <webview> tag,所有操作通过 IPC 转发到 main 进程持有的 WebContentsView。
+  webview: {
+    loadURL: (url: string): Promise<boolean> => ipcRenderer.invoke('webview:load-url', url),
+    reload: (): Promise<void> => ipcRenderer.invoke('webview:reload'),
+    goBack: (): Promise<void> => ipcRenderer.invoke('webview:go-back'),
+    goForward: (): Promise<void> => ipcRenderer.invoke('webview:go-forward'),
+    getURL: (): Promise<string> => ipcRenderer.invoke('webview:get-url'),
+    getTitle: (): Promise<string> => ipcRenderer.invoke('webview:get-title'),
+    setUserAgent: (userAgent: string): Promise<void> => ipcRenderer.invoke('webview:set-user-agent', userAgent),
+    findInPage: (query: string, options?: Electron.FindInPageOptions): Promise<void> =>
+      ipcRenderer.invoke('webview:find-in-page', query, options),
+    stopFindInPage: (action: 'clearSelection' | 'keepSelection' | 'activateSelection'): Promise<void> =>
+      ipcRenderer.invoke('webview:stop-find-in-page', action),
+    executeJavaScript: (script: string): Promise<unknown> =>
+      ipcRenderer.invoke('webview:execute-javascript', script),
+
+    // 事件订阅(由 main 进程的 webContents 事件转发)
+    onDomReady: (callback: () => void) => {
+      const handler = (): void => callback();
+      ipcRenderer.on('webview:dom-ready', handler);
+      return (): void => {
+        ipcRenderer.removeListener('webview:dom-ready', handler);
+      };
+    },
+    onDidNavigate: (callback: (url: string) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, url: string): void => callback(url);
+      ipcRenderer.on('webview:did-navigate', handler);
+      return (): void => {
+        ipcRenderer.removeListener('webview:did-navigate', handler);
+      };
+    },
+    onDidNavigateInPage: (callback: (url: string) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, url: string): void => callback(url);
+      ipcRenderer.on('webview:did-navigate-in-page', handler);
+      return (): void => {
+        ipcRenderer.removeListener('webview:did-navigate-in-page', handler);
+      };
+    },
+    onPageTitleUpdated: (callback: (title: string) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, title: string): void => callback(title);
+      ipcRenderer.on('webview:page-title-updated', handler);
+      return (): void => {
+        ipcRenderer.removeListener('webview:page-title-updated', handler);
+      };
+    },
+    onFoundInPage: (callback: (result: Electron.FoundInPageResult) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, result: Electron.FoundInPageResult): void => callback(result);
+      ipcRenderer.on('webview:found-in-page', handler);
+      return (): void => {
+        ipcRenderer.removeListener('webview:found-in-page', handler);
+      };
+    },
+    onDidFinishLoad: (callback: () => void) => {
+      const handler = (): void => callback();
+      ipcRenderer.on('webview:did-finish-load', handler);
+      return (): void => {
+        ipcRenderer.removeListener('webview:did-finish-load', handler);
+      };
+    }
   }
 };
 
