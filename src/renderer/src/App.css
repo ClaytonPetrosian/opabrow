@@ -596,14 +596,13 @@ body {
   display: flex;
   align-items: center;
   padding: 0 12px;
-  /* vibrancy 已在原生窗口层提供毛玻璃,这里只加一层淡色背景区分标题栏区域。
-     不再使用 backdrop-filter —— 之前在 transparent: true 模式下需要它来模拟
-     毛玻璃,现在 vibrancy 已经做了,backdrop-filter 是多余的开销。 */
-  background: rgba(246, 248, 251, 0.5);
+  background: rgba(246, 248, 251, 0.88);
   border-bottom: 1px solid rgba(86, 101, 119, 0.14);
   opacity: 0;
   pointer-events: auto;
   -webkit-app-region: drag;
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
   transition: opacity 180ms ease, background 180ms ease;
 }
 

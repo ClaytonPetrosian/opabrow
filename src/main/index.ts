@@ -167,18 +167,16 @@ function createMainWindow(sessionState: AppSession): BrowserWindow {
     height: bounds?.height ?? 832,
     ...(bounds ? { x: bounds.x, y: bounds.y } : {}),
     show: true, // 立刻显示,免得 macOS 透明窗口被吞
-    // 改用 macOS 原生 vibrancy 毛玻璃,替代 transparent: true + CSS backdrop-filter。
-    // vibrancy 走 CoreAnimation 原生合成路径,比 CSS backdrop-filter 便宜很多,
-    // 且不需要每帧重绘毛玻璃层。
-    transparent: false,
-    vibrancy: 'under-window',
-    visualEffectState: 'active',
+    // 用 transparent: true 让顶部 32px 标题栏区域在非 hover 时完全透明,
+    // 能看到桌面/下层应用。vibrancy 会让整个窗口恒显毛玻璃,标题栏无法
+    // "hover 才显示",所以不能用。
+    transparent: true,
     frame: false,
     titleBarStyle: 'hiddenInset', // macOS 隐藏标题栏
     trafficLightPosition: { x: -100, y: -100 }, // 把红绿黄按钮挪出可见区
     hasShadow: true,
     opacity: sessionState.opacity,
-    backgroundColor: '#00000000', // 让 vibrancy 透过 webview 透明区域
+    backgroundColor: '#00000000', // 完全透明
     movable: true, // 允许拖动
     resizable: true,
     center: true,
